@@ -1,4 +1,4 @@
-use crate::opensnitch_proto::pb::Statistics;
+use crate::opensnitch_proto::pb::{Alert, Statistics};
 use color_eyre::eyre::OptionExt;
 use futures::{FutureExt, StreamExt};
 use ratatui::crossterm::event::Event as CrosstermEvent;
@@ -34,6 +34,8 @@ pub enum Event {
 pub enum AppEvent {
     /// Update stats after receiving a gRPC Ping request.
     Update(Statistics),
+    /// Alert from opensnitch daemon.
+    Alert(Alert),
     /// Reset the counter.
     Reset,
     /// Quit the application.

@@ -1,9 +1,10 @@
 use crate::event::{AppEvent, Event, EventHandler};
-use crate::opensnitch_proto::pb::Statistics;
+use crate::opensnitch_proto::pb::{Alert, Statistics};
 use crate::server::OpenSnitchUIServer;
 use ratatui::{
     DefaultTerminal,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
+    widgets::ListState,
 };
 
 /// Application.
@@ -19,6 +20,10 @@ pub struct App {
     pub server: OpenSnitchUIServer,
     /// Latest stats to present to UI.
     pub current_stats: Statistics,
+    /// Vector of alerts
+    pub current_alerts: Vec<Alert>,
+    /// Alert list rendering state
+    pub alert_list_state: ListState,
 }
 
 impl Default for App {
@@ -31,6 +36,8 @@ impl Default for App {
             events: events_handler,
             server: server,
             current_stats: Statistics::default(),
+            current_alerts: Vec::new(),
+            alert_list_state: ListState::default(),
         }
     }
 }
@@ -58,6 +65,7 @@ impl App {
                 },
                 Event::App(app_event) => match app_event {
                     AppEvent::Update(stats) => self.update(stats),
+                    AppEvent::Alert(alert) => self.current_alerts.push(alert),
                     AppEvent::Reset => self.reset_counter(),
                     AppEvent::Quit => self.quit(),
                 },

@@ -5,7 +5,7 @@ use tonic::{Request, Response, Status, transport::Server};
 use crate::event::{AppEvent, Event};
 use crate::opensnitch_proto::pb::ui_server::Ui;
 use crate::opensnitch_proto::pb::ui_server::UiServer;
-use crate::opensnitch_proto::pb::{PingReply, PingRequest, Statistics};
+use crate::opensnitch_proto::pb::{Alert, MsgResponse, PingReply, PingRequest, Statistics};
 
 use tokio::sync::mpsc;
 
@@ -21,6 +21,17 @@ impl Ui for OpenSnitchUIGrpcServer {
         let _ = self.sender.send(Event::App(AppEvent::Update(stats)));
 
         let reply = PingReply {
+            id: request.get_ref().id,
+        };
+
+        Ok(Response::new(reply))
+    }
+
+    async fn post_alert(&self, request: Request<Alert>) -> Result<Response<MsgResponse>, Status> {
+        let alert = request.get_ref().clone();
+        let _ = self.sender.send(Event::App(AppEvent::Alert(alert)));
+
+        let reply = MsgResponse {
             id: request.get_ref().id,
         };
 

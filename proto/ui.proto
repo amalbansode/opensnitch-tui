@@ -9,7 +9,7 @@ service UI {
     // rpc AskRule (Connection) returns (Rule) {}
     // rpc Subscribe (ClientConfig) returns (ClientConfig) {}
     // rpc Notifications (stream NotificationReply) returns (stream Notification) {}
-    // rpc PostAlert(Alert) returns (MsgResponse) {}
+    rpc PostAlert(Alert) returns (MsgResponse) {}
 }
 
 /**
