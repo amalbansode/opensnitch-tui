@@ -1,11 +1,15 @@
 use crate::event::{AppEvent, Event, EventHandler};
-use crate::opensnitch_proto::pb::{Alert, Statistics};
+use crate::opensnitch_proto::pb::{Alert, Notification, Statistics};
 use crate::server::OpenSnitchUIServer;
 use ratatui::{
     DefaultTerminal,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     widgets::ListState,
 };
+
+use std::sync::Arc;
+use tokio::sync::{Mutex, mpsc};
+use tonic::Status;
 
 /// Application.
 #[derive(Debug)]
@@ -24,12 +28,19 @@ pub struct App {
     pub current_alerts: Vec<Alert>,
     /// Alert list rendering state
     pub alert_list_state: ListState,
+    /// Channel sender to generate notifications for a daemon towards.
+    /// The sender handle gets replaced to the latest client connection.
+    /// Race protection enabled by the mutex.
+    pub notification_sender: Arc<Mutex<mpsc::Sender<Result<Notification, Status>>>>,
 }
 
 impl Default for App {
     fn default() -> Self {
         let events_handler = EventHandler::new();
         let server = OpenSnitchUIServer::new(events_handler.sender.clone());
+        // Hold a dummy sender channel until a client actually connects to server and swaps in a usable
+        // sender handle.
+        let (dummy_sender, _) = mpsc::channel(1);
         Self {
             running: true,
             counter: 0,
@@ -38,6 +49,7 @@ impl Default for App {
             current_stats: Statistics::default(),
             current_alerts: Vec::new(),
             alert_list_state: ListState::default(),
+            notification_sender: Arc::new(Mutex::new(dummy_sender)),
         }
     }
 }
@@ -50,7 +62,7 @@ impl App {
 
     /// Run the application's main loop.
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
-        self.server.spawn_and_run();
+        self.server.spawn_and_run(&self.notification_sender);
         while self.running {
             terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
             match self.events.next().await? {
@@ -66,6 +78,8 @@ impl App {
                 Event::App(app_event) => match app_event {
                     AppEvent::Update(stats) => self.update(stats),
                     AppEvent::Alert(alert) => self.current_alerts.push(alert),
+                    AppEvent::NotificationReplyTypeError(_) => {} // abtodo
+                    AppEvent::TestNotify => self.test_notify().await,
                     AppEvent::Reset => self.reset_counter(),
                     AppEvent::Quit => self.quit(),
                 },
@@ -82,6 +96,7 @@ impl App {
                 self.events.send(AppEvent::Quit)
             }
             KeyCode::Char('r' | 'R') => self.events.send(AppEvent::Reset),
+            KeyCode::Char('t' | 'T') => self.events.send(AppEvent::TestNotify),
             // Other handlers you could add here.
             _ => {}
         }
@@ -106,5 +121,20 @@ impl App {
 
     pub fn reset_counter(&mut self) {
         self.counter = 0;
+    }
+
+    pub async fn test_notify(&mut self) {
+        let sender = self.notification_sender.lock().await;
+        let _ = sender
+            .send(Ok(Notification {
+                id: 123,
+                client_name: String::new(),
+                server_name: String::new(),
+                r#type: 14, // abtodo: Task stop with invalid data, so expect just an error log from daemon?
+                data: String::from("HELLO AMAL CATCH ME ON THE TCPDUMP"),
+                rules: Vec::default(),
+                sys_firewall: None,
+            }))
+            .await;
     }
 }

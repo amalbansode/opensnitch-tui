@@ -36,6 +36,10 @@ pub enum AppEvent {
     Update(Statistics),
     /// Alert from opensnitch daemon.
     Alert(Alert),
+    /// Notification reply from opensnitch daemon containing an error.
+    NotificationReplyTypeError(String),
+    /// abtodo: Test-only trigger a notification that does nothing.
+    TestNotify,
     /// Reset the counter.
     Reset,
     /// Quit the application.
