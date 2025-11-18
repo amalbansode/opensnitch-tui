@@ -36,7 +36,7 @@ impl Widget for &App {
                 dropped: {}\n\
                 rule_hits: {}\n\
                 rule_misses: {}",
-            self.counter,
+            self.rx_pings,
             self.current_stats.daemon_version,
             self.current_stats.rules,
             self.current_stats.uptime,

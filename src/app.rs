@@ -16,8 +16,8 @@ use tonic::Status;
 pub struct App {
     /// Is the application running?
     pub running: bool,
-    /// Counter.
-    pub counter: u8,
+    /// Rx Pings.
+    pub rx_pings: u64,
     /// Event handler.
     pub events: EventHandler,
     /// Server
@@ -43,7 +43,7 @@ impl Default for App {
         let (dummy_sender, _) = mpsc::channel(1);
         Self {
             running: true,
-            counter: 0,
+            rx_pings: 0,
             events: events_handler,
             server: server,
             current_stats: Statistics::default(),
@@ -115,12 +115,12 @@ impl App {
     }
 
     pub fn update(&mut self, stats: Statistics) {
-        self.counter = self.counter.saturating_add(1);
+        self.rx_pings = self.rx_pings.saturating_add(1);
         self.current_stats = stats;
     }
 
     pub fn reset_counter(&mut self) {
-        self.counter = 0;
+        self.rx_pings = 0;
     }
 
     pub async fn test_notify(&mut self) {
