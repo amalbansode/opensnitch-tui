@@ -8,6 +8,7 @@ use ratatui::{
 };
 
 use crate::constants;
+use crate::operator_util;
 
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
@@ -72,7 +73,7 @@ impl App {
 
     /// Run the application's main loop.
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
-        // Rule receiver - borrowed by the server
+        // Rule receiver gets borrowed by the server
         let (rule_sender, rule_receiver) = mpsc::channel(1);
         self.rule_sender = rule_sender;
         self.server
@@ -109,8 +110,20 @@ impl App {
                 self.events.send(AppEvent::Quit)
             }
             KeyCode::Char('t' | 'T') => self.events.send(AppEvent::TestNotify),
-            KeyCode::Char('a' | 'A') => self.send_temp_allow_rule(),
-            // Other handlers you could add here.
+            KeyCode::Char('a' | 'A') => {
+                let rule = self.make_temp_rule(true /* is_allow */);
+                if rule.is_some() {
+                    self.send_rule(rule.unwrap());
+                    self.clear_connection();
+                }
+            }
+            KeyCode::Char('d' | 'D') => {
+                let rule = self.make_temp_rule(false /* is_allow */);
+                if rule.is_some() {
+                    self.send_rule(rule.unwrap());
+                    self.clear_connection();
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -122,6 +135,8 @@ impl App {
         if self.current_connection.is_some()
             && now >= self.current_connection.as_ref().unwrap().expiry_ts
         {
+            // The daemon's gRPC call should time out and take some default action
+            // in the absence of a Rule created by us.
             self.clear_connection();
         }
     }
@@ -131,11 +146,13 @@ impl App {
         self.running = false;
     }
 
+    /// Update peer stats from incoming Ping payload.
     pub fn update_stats(&mut self, stats: Statistics) {
         self.rx_pings = self.rx_pings.saturating_add(1);
         self.current_stats = stats;
     }
 
+    /// abtodo: Server to daemon notifications under development.
     pub async fn test_notify(&mut self) {
         let sender = self.notification_sender.lock().await;
         let _ = sender
@@ -151,17 +168,24 @@ impl App {
             .await;
     }
 
+    /// Update connection holder with latest inbound event.
     pub fn update_connection(&mut self, evt: ConnectionEvent) {
         self.current_connection = Some(evt);
     }
 
+    /// Clear connection holder.
     pub fn clear_connection(&mut self) {
         self.current_connection = None;
     }
 
-    pub fn send_temp_allow_rule(&mut self) {
+    /// Generate a temporary rule for the current connection being handled by this server.
+    /// Matches on user ID && process path && IP dst && l4 port && l4 protocol.
+    /// abtodo maybe process hash too
+    /// Returns `none` if there is no current connection.
+    /// * is_allow: Whether the rule for this connection should allow or deny the flow.
+    fn make_temp_rule(&self, is_allow: bool) -> Option<Rule> {
         if self.current_connection.is_none() {
-            return;
+            return None;
         }
 
         let conn = &self.current_connection.as_ref().unwrap().connection;
@@ -169,63 +193,41 @@ impl App {
         // Build up an array of "safe"ish default operators to match this process's
         // specific connection, though this can obviously be better validated/configured
         // in the future.
-        // abtodo prettier generators
+        // This could have also been implemented with enum+trait magic, but using a simple
+        // Operator factory lets us pass this vector into the larger Rule we are creating.
         let operators = vec![
-            Operator {
-                r#type: String::from(constants::rule_type::RULE_TYPE_SIMPLE),
-                operand: String::from(constants::operand::OPERAND_USER_ID),
-                data: conn.user_id.to_string(),
-                sensitive: false,
-                list: Vec::default(),
-            },
-            Operator {
-                r#type: String::from(constants::rule_type::RULE_TYPE_SIMPLE),
-                operand: String::from(constants::operand::OPERAND_PROCESS_PATH),
-                data: conn.process_path.clone(),
-                sensitive: false,
-                list: Vec::default(),
-            },
-            Operator {
-                r#type: String::from(constants::rule_type::RULE_TYPE_SIMPLE),
-                operand: String::from(constants::operand::OPERAND_DEST_IP),
-                data: conn.dst_ip.clone(),
-                sensitive: false,
-                list: Vec::default(),
-            },
-            Operator {
-                r#type: String::from(constants::rule_type::RULE_TYPE_SIMPLE),
-                operand: String::from(constants::operand::OPERAND_DEST_PORT),
-                data: conn.dst_port.to_string(),
-                sensitive: false,
-                list: Vec::default(),
-            },
-            Operator {
-                r#type: String::from(constants::rule_type::RULE_TYPE_SIMPLE),
-                operand: String::from(constants::operand::OPERAND_PROTOCOL),
-                data: conn.protocol.clone(),
-                sensitive: false,
-                list: Vec::default(),
-            },
+            operator_util::match_user_id(conn.user_id),
+            operator_util::match_proc_path(&conn.process_path),
+            operator_util::match_dst_ip(&conn.dst_ip),
+            operator_util::match_dst_port(conn.dst_port),
+            operator_util::match_protocol(&conn.protocol),
         ];
 
+        let action = String::from(if is_allow {
+            constants::action::ACTION_ALLOW
+        } else {
+            constants::action::ACTION_DENY
+        });
+        let duration = String::from(constants::duration::DURATION_12h);
         let pretty_proc_path = conn.process_path.clone().replace("/", "-");
         let maybe_operator_json = serde_json::to_string(&operators);
         if maybe_operator_json.is_err() {
             panic!(
+                // Shouldn't really happen due to serde_impl.rs, ideally something caught at build time.
                 "Operator list JSON serialization failed: {}",
                 maybe_operator_json.unwrap_err()
             );
         }
 
-        let rule = Rule {
+        Some(Rule {
             created: 0,
-            name: format!("allow-12h-simple-{}", pretty_proc_path),
-            description: String::default(),
+            name: format!("{}-{}-simple-via-tui-{}", action, duration, pretty_proc_path),
+            description: String::default(), // abtodo some metadata like created time/TUI?
             enabled: true,
             precedence: false,
             nolog: false,
-            action: String::from(constants::action::ACTION_ALLOW),
-            duration: String::from(constants::duration::DURATION_12h),
+            action: action,
+            duration: duration,
             operator: Some(Operator {
                 r#type: String::from(constants::rule_type::RULE_TYPE_LIST),
                 operand: String::from(constants::operand::OPERAND_LIST),
@@ -233,15 +235,17 @@ impl App {
                 sensitive: false,
                 list: operators,
             }),
-        };
+        })
+    }
 
+    fn send_rule(&self, rule: Rule) {
         let send_res = self.rule_sender.try_send(rule);
         match send_res {
             Err(err) => {
+                // Shouldn't really happen so bail here.
                 panic!("Unable to send rule: {}", err);
             }
             _ => {}
         }
-        self.clear_connection();
     }
 }

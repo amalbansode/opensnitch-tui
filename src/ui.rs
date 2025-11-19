@@ -133,7 +133,7 @@ impl Widget for &App {
         // Controls
         let controls_text = format!(
             "\
-        `ctrl+c` -> quit | `a` -> accept connection 12h | `r` -> drop connection 12h"
+        `ctrl+c` -> quit | `a` -> accept connection 12h | `d` -> deny connection 12h"
         );
 
         let controls_paragraph = Paragraph::new(controls_text)
