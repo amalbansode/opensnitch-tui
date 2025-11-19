@@ -1,10 +1,8 @@
-use std::alloc::System;
 use std::net::SocketAddr;
 use std::time::{Duration, SystemTime};
 
-use futures::channel::mpsc::TryRecvError;
 use tokio::time::timeout;
-use tonic::{Code, Streaming};
+use tonic::Streaming;
 use tonic::{Request, Response, Status, transport::Server};
 
 use crate::event::{AppEvent, ConnectionEvent, Event};
@@ -59,38 +57,19 @@ impl Ui for OpenSnitchUIGrpcServer {
         // for request routing/identification.
         let connection = ConnectionEvent {
             connection: request.get_ref().clone(),
-            expiry_ts: SystemTime::now() + Duration::new(30, 0), // abtodo const-ify
+            expiry_ts: SystemTime::now() + Duration::new(15, 0), // abtodo const-ify
         };
         let _ = self
             .event_sender
             .send(Event::App(AppEvent::AskRule(connection)));
 
-        // abtodo
-        let timeout = SystemTime::now() + Duration::new(30, 100000);
-        let mut interval = tokio::time::interval(Duration::new(0, 100000)); // 100ms
-        let mut maybe_rule;
-        loop {
-            interval.tick().await;
-            // abtodo consider timeout on lock for additional foot safety?
-            // abtodo can i clean up this mess and return to tokio::time::timeout given the mutex revelation?
-            let mut recv_lock = self.app_to_server_rule_receiver.lock().await;
-            maybe_rule = recv_lock.try_recv();
-            match maybe_rule {
-                Ok(_) => break,
-                Err(err) => {
-                    match err {
-                        mpsc::error::TryRecvError::Empty => {}
-                        _ => break, // Not inspecting further
-                    }
-                }
-            }
-            if SystemTime::now() >= timeout {
-                break;
-            }
-        }
-
+        let mut recv_lock = self.app_to_server_rule_receiver.lock().await;
+        let maybe_rule = timeout(Duration::from_secs(15), recv_lock.recv()).await;
         match maybe_rule {
-            Ok(rule) => Ok(Response::new(rule)),
+            Ok(possibly_rule) => match possibly_rule {
+                Some(rule) => Ok(Response::new(rule)),
+                None => Err(Status::internal("sender somehow closed")),
+            },
             Err(err) => Err(Status::internal(format!("No rule created: {}", err))),
         }
     }

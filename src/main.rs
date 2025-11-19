@@ -1,8 +1,10 @@
 use crate::app::App;
 
 pub mod app;
+pub mod constants;
 pub mod event;
 pub mod opensnitch_proto;
+pub mod serde_impl;
 pub mod server;
 pub mod ui;
 
