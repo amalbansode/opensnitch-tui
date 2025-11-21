@@ -147,9 +147,9 @@ impl App {
                     }
                     _ => {}
                 },
-                Event::App(app_event) => match app_event {
+                Event::App(app_event) => match *app_event {
                     AppEvent::Update(stats) => self.update_stats(stats),
-                    AppEvent::Alert(alert) => self.current_alerts.push_back(alert),
+                    AppEvent::Alert(alert) => self.current_alerts.push_back(alert.clone()),
                     AppEvent::AskRule(evt) => self.update_connection(evt),
                     AppEvent::TestNotify => self.test_notify().await,
                     AppEvent::Quit => self.quit(),

@@ -12,20 +12,12 @@ const TICK_FPS: f64 = 30.0;
 /// Representation of all possible events.
 #[derive(Clone, Debug)]
 pub enum Event {
-    /// An event that is emitted on a regular schedule.
-    ///
-    /// Use this event to run any code which has to run outside of being a direct response to a user
-    /// event. e.g. polling exernal systems, updating animations, or rendering the UI based on a
-    /// fixed frame rate.
+    /// Routine tick.
     Tick,
-    /// Crossterm events.
-    ///
     /// These events are emitted by the terminal.
     Crossterm(CrosstermEvent),
     /// Application events.
-    ///
-    /// Use this event to emit custom events that are specific to your application.
-    App(AppEvent),
+    App(Box<AppEvent>),
 }
 
 /// Application events.
@@ -43,6 +35,7 @@ pub enum AppEvent {
     Quit,
 }
 
+/// Wrapper for connections with extra metadata.
 #[derive(Clone, Debug)]
 pub struct ConnectionEvent {
     /// The connection that created this event.
@@ -98,7 +91,7 @@ impl EventHandler {
     pub fn send(&mut self, app_event: AppEvent) {
         // Ignore the result as the reciever cannot be dropped while this struct still has a
         // reference to it
-        let _ = self.sender.send(Event::App(app_event));
+        let _ = self.sender.send(Event::App(Box::new(app_event)));
     }
 }
 

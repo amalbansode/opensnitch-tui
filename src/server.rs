@@ -43,7 +43,7 @@ impl Ui for OpenSnitchUIGrpcServer {
         let stats: pb::Statistics = request.get_ref().stats.as_ref().unwrap().clone();
         let _ = self
             .server_to_app_event_sender
-            .send(Event::App(AppEvent::Update(stats)));
+            .send(Event::App(Box::new(AppEvent::Update(stats))));
 
         let reply = pb::PingReply {
             id: request.get_ref().id,
@@ -59,10 +59,10 @@ impl Ui for OpenSnitchUIGrpcServer {
         let alert = request.get_ref();
         let _ = self
             .server_to_app_event_sender
-            .send(Event::App(AppEvent::Alert(alert::Alert::new(
+            .send(Event::App(Box::new(AppEvent::Alert(alert::Alert::new(
                 std::time::SystemTime::now(),
                 alert,
-            ))));
+            )))));
 
         let reply = pb::MsgResponse {
             id: request.get_ref().id,
@@ -92,7 +92,7 @@ impl Ui for OpenSnitchUIGrpcServer {
         };
         let _ = self
             .server_to_app_event_sender
-            .send(Event::App(AppEvent::AskRule(connection)));
+            .send(Event::App(Box::new(AppEvent::AskRule(connection))));
 
         let mut recv_lock = self.app_to_server_rule_receiver.lock().await;
         let maybe_rule = timeout(self.connection_disposition_timeout, recv_lock.recv()).await;
@@ -149,40 +149,42 @@ impl Ui for OpenSnitchUIGrpcServer {
                                 match notification.code() {
                                     pb::NotificationReplyCode::Error => {
                                         // Redirect error notifications to the alerts channel
-                                        let _ =
-                                            tx.send(Event::App(AppEvent::Alert(alert::Alert {
+                                        let _ = tx.send(Event::App(Box::new(AppEvent::Alert(
+                                            alert::Alert {
                                                 timestamp: std::time::SystemTime::now(),
                                                 priority: alert::Priority::Medium,
                                                 r#type: alert::Type::Error,
                                                 what: alert::What::Generic,
                                                 msg: notification.data,
-                                            })));
+                                            },
+                                        ))));
                                     }
                                     pb::NotificationReplyCode::Ok => {}
                                 }
                             }
                             None => {
                                 // Stream closed by peer
-                                let _ = tx.send(Event::App(AppEvent::Alert(alert::Alert {
-                                    timestamp: std::time::SystemTime::now(),
-                                    priority: alert::Priority::High,
-                                    r#type: alert::Type::Warning,
-                                    what: alert::What::Generic,
-                                    msg: String::from("gRPC stream closed by daemon"),
-                                })));
+                                let _ =
+                                    tx.send(Event::App(Box::new(AppEvent::Alert(alert::Alert {
+                                        timestamp: std::time::SystemTime::now(),
+                                        priority: alert::Priority::High,
+                                        r#type: alert::Type::Warning,
+                                        what: alert::What::Generic,
+                                        msg: String::from("gRPC stream closed by daemon"),
+                                    }))));
                                 break;
                             }
                         }
                     }
                     Err(err) => {
                         // gRPC error from peer on stream
-                        let _ = tx.send(Event::App(AppEvent::Alert(alert::Alert {
+                        let _ = tx.send(Event::App(Box::new(AppEvent::Alert(alert::Alert {
                             timestamp: std::time::SystemTime::now(),
                             priority: alert::Priority::High,
                             r#type: alert::Type::Warning,
                             what: alert::What::Generic,
                             msg: format!("gRPC error from daemon: {}", err),
-                        })));
+                        }))));
                         break;
                     }
                 }
