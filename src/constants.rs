@@ -3,140 +3,246 @@
 //! opensnitch/daemon/rule/operator.go
 
 /// Operand types to label firewall rules' data blob.
-pub mod operand {
-    pub const OPERAND_PROCESS_ID: &str = "process.id";
-    pub const OPERAND_PROCESS_PATH: &str = "process.path";
-    pub const OPERAND_PROCESS_COMMAND: &str = "process.command";
-    pub const OPERAND_PROCESS_ENV: &str = "process.env.";
-    pub const OPERAND_PROCESS_HASH_MD5: &str = "process.hash.md5";
-    pub const OPERAND_PROCESS_HASH_SHA1: &str = "process.hash.sha1";
-    pub const OPERAND_USER_ID: &str = "user.id";
-    pub const OPERAND_IFACE_OUT: &str = "iface.out";
-    pub const OPERAND_IFACE_IN: &str = "iface.in";
-    pub const OPERAND_SOURCE_IP: &str = "source.ip";
-    pub const OPERAND_SOURCE_PORT: &str = "source.port";
-    pub const OPERAND_DEST_IP: &str = "dest.ip";
-    pub const OPERAND_DEST_HOST: &str = "dest.host";
-    pub const OPERAND_DEST_PORT: &str = "dest.port";
-    pub const OPERAND_DEST_NETWORK: &str = "dest.network";
-    pub const OPERAND_SOURCE_NETWORK: &str = "source.network";
-    pub const OPERAND_PROTOCOL: &str = "protocol";
-    pub const OPERAND_LIST: &str = "list";
-    pub const OPERAND_LIST_DOMAINS: &str = "lists.domains";
-    pub const OPERAND_LIST_DOMAINS_REGEXP: &str = "lists.domains_regexp";
-    pub const OPERAND_LIST_IPS: &str = "lists.ips";
-    pub const OPERAND_LIST_NETS: &str = "lists.nets";
+#[derive(Debug, Clone, Copy)]
+pub enum Operand {
+    ProcessId,
+    ProcessPath,
+    ProcessCmd,
+    ProcessEnv,
+    ProcessHashMd5,
+    ProcessHashSha1,
+    UserId,
+    IfaceOut,
+    IfaceIn,
+    SrcIp,
+    SrcPort,
+    DstIp,
+    DstHost,
+    DstPort,
+    DstNetwork,
+    SrcNetwork,
+    Protocol,
+    List,
+    ListDomains,
+    ListDomainsRegexp,
+    ListIps,
+    ListNets,
+}
+
+impl Operand {
+    /// Enum as string for OpenSnitch daemon.
+    pub fn get_str(&self) -> &str {
+        match self {
+            Operand::ProcessId => "process.id",
+            Operand::ProcessPath => "process.path",
+            Operand::ProcessCmd => "process.command",
+            Operand::ProcessEnv => "process.env.",
+            Operand::ProcessHashMd5 => "process.hash.md5",
+            Operand::ProcessHashSha1 => "process.hash.sha1",
+            Operand::UserId => "user.id",
+            Operand::IfaceOut => "iface.out",
+            Operand::IfaceIn => "iface.in",
+            Operand::SrcIp => "source.ip",
+            Operand::SrcPort => "source.port",
+            Operand::DstIp => "dest.ip",
+            Operand::DstHost => "dest.host",
+            Operand::DstPort => "dest.port",
+            Operand::DstNetwork => "dest.network",
+            Operand::SrcNetwork => "source.network",
+            Operand::Protocol => "protocol",
+            Operand::List => "list",
+            Operand::ListDomains => "lists.domains",
+            Operand::ListDomainsRegexp => "lists.domains_regexp",
+            Operand::ListIps => "lists.ips",
+            Operand::ListNets => "lists.nets",
+        }
+    }
 }
 
 /// Firewall rule type hint.
-pub mod rule_type {
-    pub const RULE_TYPE_LIST: &str = "list";
-    pub const RULE_TYPE_LISTS: &str = "lists";
-    pub const RULE_TYPE_SIMPLE: &str = "simple";
-    pub const RULE_TYPE_REGEXP: &str = "regexp";
-    pub const RULE_TYPE_NETWORK: &str = "network";
+#[derive(Debug, Clone, Copy)]
+pub enum RuleType {
+    List,
+    Lists,
+    Simple,
+    Regexp,
+    Network,
+}
+
+impl RuleType {
+    /// Enum as string for OpenSnitch daemon.
+    pub fn get_str(&self) -> &str {
+        match self {
+            RuleType::List => "list",
+            RuleType::Lists => "lists",
+            RuleType::Simple => "simple",
+            RuleType::Regexp => "regexp",
+            RuleType::Network => "network",
+        }
+    }
 }
 
 /// Firewall rule actions.
 /// Note: A daemon's "default actions" set is a narrower subset
-/// of this list, see below.
-pub mod action {
-    pub const ACTION_ALLOW: &str = "allow";
-    pub const ACTION_DENY: &str = "deny";
-    pub const ACTION_REJECT: &str = "reject";
-    pub const ACTION_ACCEPT: &str = "accept";
-    pub const ACTION_DROP: &str = "drop";
-    pub const ACTION_JUMP: &str = "jump";
-    pub const ACTION_REDIRECT: &str = "redirect";
-    pub const ACTION_RETURN: &str = "return";
-    pub const ACTION_TPROXY: &str = "tproxy";
-    pub const ACTION_SNAT: &str = "snat";
-    pub const ACTION_DNAT: &str = "dnat";
-    pub const ACTION_MASQUERADE: &str = "masquerade";
-    pub const ACTION_QUEUE: &str = "queue";
-    pub const ACTION_LOG: &str = "log";
-    pub const ACTION_STOP: &str = "stop";
+/// of this list, see DefaultAction.
+#[derive(Debug, Clone, Copy)]
+pub enum Action {
+    Allow,
+    Deny,
+    Reject,
+    Accept,
+    Drop,
+    Jump,
+    Redirect,
+    Return,
+    TProxy,
+    Snat,
+    Dnat,
+    Masquerade,
+    Queue,
+    Log,
+    Stop,
+}
+
+impl Action {
+    /// Validates input action and returns enum variant.
+    pub fn new(s: &str) -> Result<Action, BadOption> {
+        match s {
+            "allow" => Ok(Action::Allow),
+            "deny" => Ok(Action::Deny),
+            "reject" => Ok(Action::Reject),
+            "accept" => Ok(Action::Accept),
+            "drop" => Ok(Action::Drop),
+            "jump" => Ok(Action::Jump),
+            "redirect" => Ok(Action::Redirect),
+            "return" => Ok(Action::Return),
+            "tproxy" => Ok(Action::TProxy),
+            "snat" => Ok(Action::Snat),
+            "dnat" => Ok(Action::Dnat),
+            "masquerade" => Ok(Action::Masquerade),
+            "queue" => Ok(Action::Queue),
+            "log" => Ok(Action::Log),
+            "stop" => Ok(Action::Stop),
+            _ => Err(BadOption {
+                input: s.to_string(),
+            }),
+        }
+    }
+
+    /// Enum as string for OpenSnitch daemon.
+    pub fn get_str(&self) -> &str {
+        match self {
+            Action::Allow => "allow",
+            Action::Deny => "deny",
+            Action::Reject => "reject",
+            Action::Accept => "accept",
+            Action::Drop => "drop",
+            Action::Jump => "jump",
+            Action::Redirect => "redirect",
+            Action::Return => "return",
+            Action::TProxy => "tproxy",
+            Action::Snat => "snat",
+            Action::Dnat => "dnat",
+            Action::Masquerade => "masquerade",
+            Action::Queue => "queue",
+            Action::Log => "log",
+            Action::Stop => "stop",
+        }
+    }
 }
 
 /// Durations for firewall rules to be applicable.
-#[allow(non_upper_case_globals)]
-pub mod duration {
-    pub const DURATION_FIELD: &str = "duration";
+pub const DURATION_FIELD: &str = "duration";
 
-    #[derive(Debug, Clone, Copy)]
-    pub enum Duration {
-        UntilRestart,
-        Always,
-        Once,
-        Hours12,
-        Hours1,
-        Minutes30,
-        Minutes15,
-        Minutes5,
-        Seconds30,
+#[derive(Debug, Clone, Copy)]
+pub enum Duration {
+    UntilRestart,
+    Always,
+    Once,
+    Hours12,
+    Hours1,
+    Minutes30,
+    Minutes15,
+    Minutes5,
+    Seconds30,
+}
+
+impl Duration {
+    /// Validates input duration and returns enum variant.
+    pub fn new(s: &str) -> Result<Duration, BadOption> {
+        match s {
+            "until restart" => Ok(Duration::UntilRestart),
+            "always" => Ok(Duration::Always),
+            "once" => Ok(Duration::Once),
+            "12h" => Ok(Duration::Hours12),
+            "1h" => Ok(Duration::Hours1),
+            "30m" => Ok(Duration::Minutes30),
+            "15m" => Ok(Duration::Minutes15),
+            "5m" => Ok(Duration::Minutes5),
+            "30s" => Ok(Duration::Seconds30),
+            _ => Err(BadOption {
+                input: s.to_string(),
+            }),
+        }
     }
 
-    impl Duration {
-        /// Validates input duration and returns enum variant.
-        pub fn new(s: &str) -> Result<Duration, ()> {
-            match s {
-                "until restart" => Ok(Duration::UntilRestart),
-                "always" => Ok(Duration::Always),
-                "once" => Ok(Duration::Once),
-                "12h" => Ok(Duration::Hours12),
-                "1h" => Ok(Duration::Hours1),
-                "30m" => Ok(Duration::Minutes30),
-                "15m" => Ok(Duration::Minutes15),
-                "5m" => Ok(Duration::Minutes5),
-                "30s" => Ok(Duration::Seconds30),
-                _ => Err(()),
-            }
-        }
-
-        /// Enum as string for OpenSnitch daemon.
-        pub fn get_str(&self) -> &str {
-            match self {
-                Duration::UntilRestart => "until restart",
-                Duration::Always => "always",
-                Duration::Once => "once",
-                Duration::Hours12 => "12h",
-                Duration::Hours1 => "1h",
-                Duration::Minutes30 => "30m",
-                Duration::Minutes15 => "15m",
-                Duration::Minutes5 => "5m",
-                Duration::Seconds30 => "30s",
-            }
+    /// Enum as string for OpenSnitch daemon.
+    pub fn get_str(&self) -> &str {
+        match self {
+            Duration::UntilRestart => "until restart",
+            Duration::Always => "always",
+            Duration::Once => "once",
+            Duration::Hours12 => "12h",
+            Duration::Hours1 => "1h",
+            Duration::Minutes30 => "30m",
+            Duration::Minutes15 => "15m",
+            Duration::Minutes5 => "5m",
+            Duration::Seconds30 => "30s",
         }
     }
 }
 
 /// Default action values.
-pub mod default_action {
-    #[derive(Debug, Clone, Copy)]
-    pub enum DefaultAction {
-        Allow,
-        Deny,
-        Reject,
+#[derive(Debug, Clone, Copy)]
+pub enum DefaultAction {
+    Allow,
+    Deny,
+    Reject,
+}
+
+impl DefaultAction {
+    /// Validates input action and returns enum variant.
+    pub fn new(s: &str) -> Result<DefaultAction, BadOption> {
+        match s {
+            "allow" => Ok(DefaultAction::Allow),
+            "deny" => Ok(DefaultAction::Deny),
+            "reject" => Ok(DefaultAction::Reject),
+            _ => Err(BadOption {
+                input: s.to_string(),
+            }),
+        }
     }
 
-    impl DefaultAction {
-        /// Validates input action and returns enum variant.
-        pub fn new(s: &str) -> Result<DefaultAction, ()> {
-            match s {
-                "allow" => Ok(DefaultAction::Allow),
-                "deny" => Ok(DefaultAction::Deny),
-                "reject" => Ok(DefaultAction::Reject),
-                _ => Err(()),
-            }
-        }
-
-        /// Enum as string for OpenSnitch daemon.
-        pub fn get_str(&self) -> &str {
-            match self {
-                DefaultAction::Allow => "allow",
-                DefaultAction::Deny => "deny",
-                DefaultAction::Reject => "reject",
-            }
+    /// Enum as string for OpenSnitch daemon.
+    pub fn get_str(&self) -> &str {
+        match self {
+            DefaultAction::Allow => "allow",
+            DefaultAction::Deny => "deny",
+            DefaultAction::Reject => "reject",
         }
     }
 }
+
+/// Error type for bad option provided to enum constructor.
+#[derive(Debug, Clone)]
+pub struct BadOption {
+    pub input: String,
+}
+
+impl std::fmt::Display for BadOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Bad Option: {}", self.input)
+    }
+}
+
+impl std::error::Error for BadOption {}

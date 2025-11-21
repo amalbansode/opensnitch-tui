@@ -208,7 +208,7 @@ impl OpenSnitchUIServer {
             Mutex<mpsc::Sender<Result<pb::Notification, Status>>>,
         >,
         app_to_server_rule_receiver: mpsc::Receiver<pb::Rule>,
-        default_action: constants::default_action::DefaultAction,
+        default_action: constants::DefaultAction,
         connection_disposition_timeout: Duration,
     ) {
         let server_to_app_event_sender_handle = server_to_app_event_sender.clone();

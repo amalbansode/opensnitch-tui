@@ -7,7 +7,7 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
 };
 
-use crate::constants::{self, default_action, duration};
+use crate::constants;
 use crate::operator_util;
 
 use std::collections::VecDeque;
@@ -44,9 +44,9 @@ pub struct App {
     /// gRPC server IP and port to bind to.
     bind_address: SocketAddr,
     /// Default action to be sent to connected daemons.
-    default_action: default_action::DefaultAction,
+    default_action: constants::DefaultAction,
     /// Temporary rule lifetime.
-    pub temp_rule_lifetime: constants::duration::Duration,
+    pub temp_rule_lifetime: constants::Duration,
     /// The duration up to which app waits for user to make a disposition
     /// (allow/deny) on a trapped connection.
     connection_disposition_timeout: std::time::Duration,
@@ -72,12 +72,12 @@ impl App {
             ));
         }
 
-        let maybe_default_action = default_action::DefaultAction::new(default_action_in);
+        let maybe_default_action = constants::DefaultAction::new(default_action_in);
         if maybe_default_action.is_err() {
             return Err(format!("Invalid default action: {}", default_action_in));
         }
 
-        let maybe_temp_rule_lifetime = duration::Duration::new(temp_rule_lifetime);
+        let maybe_temp_rule_lifetime = constants::Duration::new(temp_rule_lifetime);
         if maybe_temp_rule_lifetime.is_err() {
             return Err(format!(
                 "Invalid temporary rule lifetime: {}",
@@ -167,16 +167,16 @@ impl App {
             }
             KeyCode::Char('t' | 'T') => self.events.send(AppEvent::TestNotify),
             KeyCode::Char('a' | 'A') => {
-                self.make_and_send_rule(true /* is_allow */, self.temp_rule_lifetime);
+                self.make_and_send_rule(constants::Action::Allow, self.temp_rule_lifetime);
             }
             KeyCode::Char('d' | 'D') => {
-                self.make_and_send_rule(false /* is_allow */, self.temp_rule_lifetime);
+                self.make_and_send_rule(constants::Action::Deny, self.temp_rule_lifetime);
             }
             KeyCode::Char('j' | 'J') => {
-                self.make_and_send_rule(true /* is_allow */, duration::Duration::Always);
+                self.make_and_send_rule(constants::Action::Allow, constants::Duration::Always);
             }
             KeyCode::Char('l' | 'L') => {
-                self.make_and_send_rule(false /* is_allow */, duration::Duration::Always);
+                self.make_and_send_rule(constants::Action::Deny, constants::Duration::Always);
             }
             KeyCode::Up => {
                 self.alert_list_render_offset = self.alert_list_render_offset.saturating_sub(1);
@@ -266,7 +266,11 @@ impl App {
     /// TODO: Consider including process hash for extra strictness.
     /// Returns `none` if there is no current connection.
     /// * is_allow: Whether the rule for this connection should allow or deny the flow.
-    fn make_rule(&self, is_allow: bool, duration: duration::Duration) -> Option<pb::Rule> {
+    fn make_rule(
+        &self,
+        action: constants::Action,
+        duration: constants::Duration,
+    ) -> Option<pb::Rule> {
         // Noop if there's no connection trapped.
         self.current_connection.as_ref()?;
 
@@ -285,11 +289,7 @@ impl App {
             operator_util::match_protocol(&conn.protocol),
         ];
 
-        let action = String::from(if is_allow {
-            constants::action::ACTION_ALLOW
-        } else {
-            constants::action::ACTION_DENY
-        });
+        let action_str = action.get_str();
         let duration = String::from(duration.get_str());
         let pretty_proc_path = conn.process_path.clone().replace("/", "-");
         let maybe_operator_json = serde_json::to_string(&operators);
@@ -305,17 +305,17 @@ impl App {
             created: 0,
             name: format!(
                 "{}-{}-simple-via-tui-{}",
-                action, duration, pretty_proc_path
+                action_str, duration, pretty_proc_path
             ),
             description: String::default(),
             enabled: true,
             precedence: false,
             nolog: false,
-            action,
+            action: String::from(action_str),
             duration,
             operator: Some(pb::Operator {
-                r#type: String::from(constants::rule_type::RULE_TYPE_LIST),
-                operand: String::from(constants::operand::OPERAND_LIST),
+                r#type: String::from(constants::RuleType::List.get_str()),
+                operand: String::from(constants::Operand::List.get_str()),
                 data: maybe_operator_json.unwrap(),
                 sensitive: false,
                 list: operators,
@@ -331,8 +331,8 @@ impl App {
         }
     }
 
-    fn make_and_send_rule(&mut self, is_allow: bool, duration: duration::Duration) {
-        if let Some(rule) = self.make_rule(is_allow, duration) {
+    fn make_and_send_rule(&mut self, action: constants::Action, duration: constants::Duration) {
+        if let Some(rule) = self.make_rule(action, duration) {
             self.send_rule(rule);
             self.clear_connection();
         }
