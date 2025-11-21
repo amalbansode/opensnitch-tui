@@ -119,12 +119,11 @@ impl Widget for &App {
 
         let items: Vec<ListItem> = items_iter
             .map(|alert| {
-                let age_s: u64;
                 let maybe_age = now.duration_since(alert.timestamp);
-                match maybe_age {
-                    Ok(age) => age_s = age.as_secs(),
-                    Err(_) => age_s = 0, // Just default to 0s in case time goes backwards
-                }
+                let age_s: u64 = match maybe_age {
+                    Ok(age) => age.as_secs(),
+                    Err(_) => 0, // Just default to 0s in case time goes backwards
+                };
                 let alert_text = format!(
                     "{}s ago : {:?} : {:?} : {:?} : {}\n",
                     age_s, alert.r#type, alert.priority, alert.what, alert.msg,

@@ -1,6 +1,6 @@
-/// Constants sourced from commit e5d1702bd36dd06c552c95ad3a3dcd023c3eb231
-/// opensnitch/ui/opensnitch/config.py
-/// opensnitch/daemon/rule/operator.go
+//! Constants sourced from commit e5d1702bd36dd06c552c95ad3a3dcd023c3eb231
+//! opensnitch/ui/opensnitch/config.py
+//! opensnitch/daemon/rule/operator.go
 
 /// Operand types to label firewall rules' data blob.
 pub mod operand {
@@ -78,8 +78,8 @@ pub mod duration {
 
     impl Duration {
         /// Validates input duration and returns enum variant.
-        pub fn new(s: &String) -> Result<Duration, ()> {
-            match s.as_str() {
+        pub fn new(s: &str) -> Result<Duration, ()> {
+            match s {
                 "until restart" => Ok(Duration::UntilRestart),
                 "always" => Ok(Duration::Always),
                 "once" => Ok(Duration::Once),
@@ -121,8 +121,8 @@ pub mod default_action {
 
     impl DefaultAction {
         /// Validates input action and returns enum variant.
-        pub fn new(s: &String) -> Result<DefaultAction, ()> {
-            match s.as_str() {
+        pub fn new(s: &str) -> Result<DefaultAction, ()> {
+            match s {
                 "allow" => Ok(DefaultAction::Allow),
                 "deny" => Ok(DefaultAction::Deny),
                 "reject" => Ok(DefaultAction::Reject),

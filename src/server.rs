@@ -211,7 +211,6 @@ impl OpenSnitchUIServer {
         default_action: constants::default_action::DefaultAction,
         connection_disposition_timeout: Duration,
     ) {
-        let address = address;
         let server_to_app_event_sender_handle = server_to_app_event_sender.clone();
         let notification_sender = Arc::clone(app_to_server_notification_sender);
         let rule_receiver = Mutex::new(app_to_server_rule_receiver);

@@ -209,20 +209,16 @@ impl App {
         match self.current_alerts.front() {
             None => {}
             Some(alert) => {
-                let maybe_age = now.duration_since(alert.timestamp);
-                match maybe_age {
-                    Ok(age) => {
-                        // Max alert duration is 60s, could be adjustable if needed
-                        if age.as_secs() >= 60 {
-                            // Pop this off but also correct the render offset in case it's set to back of list.
-                            if self.alert_list_render_offset == (self.current_alerts.len() - 1) {
-                                self.alert_list_render_offset =
-                                    self.alert_list_render_offset.saturating_sub(1);
-                            }
-                            self.current_alerts.pop_front();
+                if let Ok(age) = now.duration_since(alert.timestamp) {
+                    // Max alert duration is 60s, could be adjustable if needed
+                    if age.as_secs() >= 60 {
+                        // Pop this off but also correct the render offset in case it's set to back of list.
+                        if self.alert_list_render_offset == (self.current_alerts.len() - 1) {
+                            self.alert_list_render_offset =
+                                self.alert_list_render_offset.saturating_sub(1);
                         }
+                        self.current_alerts.pop_front();
                     }
-                    Err(_) => {} // Do nothing in case time goes backwards
                 }
             }
         }
@@ -336,9 +332,8 @@ impl App {
     }
 
     fn make_and_send_rule(&mut self, is_allow: bool, duration: duration::Duration) {
-        let rule = self.make_rule(is_allow, duration);
-        if rule.is_some() {
-            self.send_rule(rule.unwrap());
+        if let Some(rule) = self.make_rule(is_allow, duration) {
+            self.send_rule(rule);
             self.clear_connection();
         }
     }
