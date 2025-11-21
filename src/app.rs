@@ -267,7 +267,7 @@ impl App {
 
     /// Generate a rule for the current connection being handled by this server.
     /// Matches on user ID && process path && IP dst && l4 port && l4 protocol.
-    /// abtodo: Consider including process hash for extra strictness.
+    /// TODO: Consider including process hash for extra strictness.
     /// Returns `none` if there is no current connection.
     /// * is_allow: Whether the rule for this connection should allow or deny the flow.
     fn make_rule(&self, is_allow: bool, duration: duration::Duration) -> Option<pb::Rule> {

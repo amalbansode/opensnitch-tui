@@ -28,6 +28,8 @@ pub struct OpenSnitchUIGrpcServer {
     default_action: String,
     /// Duration to wait for app to provide a rule for client that's trapped a connection.
     connection_disposition_timeout: Duration,
+    /// Mutex to ensure only one AskRule request is active at a time.
+    askrule_lock: Mutex<()>,
 }
 
 #[tonic::async_trait]
@@ -76,8 +78,14 @@ impl Ui for OpenSnitchUIGrpcServer {
         // In theory, the current proto spec and OpenSnitch daemon design doesn't seem
         // to permit opening concurrent `AskRule` requests.
         // If this was to be supported in the future, we'd want to mix in some UID
-        // for request routing/identification.
-        // abtodo: More strongly guarantee the one-at-a-time contract on server side too.
+        // for request routing/identification as well.
+        let askrule_permit = self.askrule_lock.try_lock();
+        if askrule_permit.is_err() {
+            return Err(Status::resource_exhausted(
+                "Only one AskRule request permitted at a time",
+            ));
+        }
+
         let connection = ConnectionEvent {
             connection: request.get_ref().clone(),
             expiry_ts: SystemTime::now() + self.connection_disposition_timeout,
@@ -125,6 +133,11 @@ impl Ui for OpenSnitchUIGrpcServer {
         let mut in_stream = request.into_inner();
         let (app_to_server_notification_tx, app_to_server_notification_rx) = mpsc::channel(128);
         let tx = self.server_to_app_event_sender.clone();
+
+        // Grab a lock on the app to server notification sender, and swaparoo the new sender in.
+        // A pre-existing receiver on the old sender should also eventually close since its sender will have closed.
+        let mut sender_chan = self.app_to_server_notification_sender.lock().await;
+        *sender_chan = app_to_server_notification_tx;
 
         tokio::spawn(async move {
             loop {
@@ -176,13 +189,6 @@ impl Ui for OpenSnitchUIGrpcServer {
             }
         });
 
-        // Grab a lock on the app to server notification sender, and swaparoo the new sender in.
-        // A pre-existing receiver on the old sender should also eventually close since its sender will have closed.
-        // abtodo: how does the app know to flush any state related to "prior" peer or should we just live with
-        // the desync? maybe send a "flush notifications event" in above async task?
-        let mut sender_chan = self.app_to_server_notification_sender.lock().await;
-        *sender_chan = app_to_server_notification_tx;
-
         // Return a stream wrapper over the app to server notifications Receiver.
         let out_stream = Self::NotificationsStream::new(app_to_server_notification_rx);
         Ok(Response::new(out_stream))
@@ -217,6 +223,7 @@ impl OpenSnitchUIServer {
                 app_to_server_rule_receiver: rule_receiver,
                 default_action: default_action_str,
                 connection_disposition_timeout: connection_disposition_timeout,
+                askrule_lock: Mutex::default(),
             };
             let _ = Server::builder()
                 .add_service(UiServer::new(grpc_server))
