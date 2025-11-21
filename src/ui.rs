@@ -146,7 +146,7 @@ impl Widget for &App {
             "\
         `ctrl+c` → quit | `a/d` → (allow/deny) connection {}\n\
         `j/l` → (allow/deny) connection forever | `up/down` → scroll alerts",
-            self.temp_rule_duration.get_str(),
+            self.temp_rule_lifetime.get_str(),
         );
 
         let controls_paragraph = Paragraph::new(controls_text)

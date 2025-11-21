@@ -1,6 +1,6 @@
 # OpenSnitch TUI
 
-This is a Terminal UI control plane for [OpenSnitch](https://github.com/evilsocket/opensnitch), a Linux interactive application firewall inspired by Little Snitch.
+A Terminal UI control plane for [OpenSnitch](https://github.com/evilsocket/opensnitch), an interactive application firewall for Linux inspired by Little Snitch.
 
 This TUI is built in Rust, namely using the `tokio`, `tonic`, and `ratatui` crates. This program currently implements a subset of functions that the [OpenSnitch GUI](https://github.com/evilsocket/opensnitch/wiki/Getting-started) supports. Some features may never be supported due to complexity (e.g. support for multiple nodes).
 

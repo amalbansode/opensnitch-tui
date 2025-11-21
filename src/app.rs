@@ -45,8 +45,8 @@ pub struct App {
     bind_address: SocketAddr,
     /// Default action to be sent to connected daemons.
     default_action: default_action::DefaultAction,
-    /// Temporary rule duration.
-    pub temp_rule_duration: constants::duration::Duration,
+    /// Temporary rule lifetime.
+    pub temp_rule_lifetime: constants::duration::Duration,
     /// The duration up to which app waits for user to make a disposition
     /// (allow/deny) on a trapped connection.
     connection_disposition_timeout: std::time::Duration,
@@ -55,10 +55,10 @@ pub struct App {
 impl App {
     /// Constructs a new instance of [`App`].
     pub fn new(
-        bind_string: String,
-        default_action_in: String,
-        temp_rule_duration: String,
-        connection_disposition_timeout_in: u64,
+        bind_string: &String,
+        default_action_in: &String,
+        temp_rule_lifetime: &String,
+        connection_disposition_timeout_in: &u64,
     ) -> Result<Self, String> {
         if bind_string.starts_with("unix") {
             return Err(String::from("Unix domain sockets not supported"));
@@ -77,24 +77,24 @@ impl App {
             return Err(format!("Invalid default action: {}", default_action_in));
         }
 
-        let maybe_temp_rule_duration = duration::Duration::new(&temp_rule_duration);
-        if maybe_temp_rule_duration.is_err() {
+        let maybe_temp_rule_lifetime = duration::Duration::new(&temp_rule_lifetime);
+        if maybe_temp_rule_lifetime.is_err() {
             return Err(format!(
-                "Invalid temporary rule duration: {}",
-                temp_rule_duration
+                "Invalid temporary rule lifetime: {}",
+                temp_rule_lifetime
             ));
         }
 
         // The client RPC context timeout in opensnitch/daemon/ui/client.go is set to 120s
         // Subtract a few seconds just to be nice.
-        if connection_disposition_timeout_in > 115 {
+        if *connection_disposition_timeout_in > 115 {
             return Err(format!(
                 "Connection disposition timeout {} cannot be over 115",
                 connection_disposition_timeout_in
             ));
         }
         let connection_disposition_timeout =
-            std::time::Duration::from_secs(connection_disposition_timeout_in);
+            std::time::Duration::from_secs(*connection_disposition_timeout_in);
 
         let events_handler = EventHandler::new();
         let server = OpenSnitchUIServer::default();
@@ -117,7 +117,7 @@ impl App {
             rule_sender: dummy_rule_sender,
             bind_address: maybe_bind_addr.unwrap(),
             default_action: maybe_default_action.unwrap(),
-            temp_rule_duration: maybe_temp_rule_duration.unwrap(),
+            temp_rule_lifetime: maybe_temp_rule_lifetime.unwrap(),
             connection_disposition_timeout: connection_disposition_timeout,
         })
     }
@@ -167,10 +167,10 @@ impl App {
             }
             KeyCode::Char('t' | 'T') => self.events.send(AppEvent::TestNotify),
             KeyCode::Char('a' | 'A') => {
-                self.make_and_send_rule(true /* is_allow */, self.temp_rule_duration);
+                self.make_and_send_rule(true /* is_allow */, self.temp_rule_lifetime);
             }
             KeyCode::Char('d' | 'D') => {
-                self.make_and_send_rule(false /* is_allow */, self.temp_rule_duration);
+                self.make_and_send_rule(false /* is_allow */, self.temp_rule_lifetime);
             }
             KeyCode::Char('j' | 'J') => {
                 self.make_and_send_rule(true /* is_allow */, duration::Duration::Always);

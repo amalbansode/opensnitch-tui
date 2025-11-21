@@ -1,7 +1,9 @@
 use crate::app::App;
+// use crate::cli;
 
 pub mod alert;
 pub mod app;
+pub mod cli;
 pub mod constants;
 pub mod event;
 pub mod opensnitch_json;
@@ -13,14 +15,15 @@ pub mod ui;
 
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
+    let matches = cli::setup().get_matches();
+
     color_eyre::install()?;
     let terminal = ratatui::init();
-    // abtodo some CLI flags for bind addr/port, default actions, etc.
     let app = App::new(
-        String::from("127.0.0.1:50051"),
-        String::from("deny"),
-        String::from("12h"),
-        30,
+        matches.get_one::<String>("ip_port").unwrap(),
+        matches.get_one::<String>("default_action").unwrap(),
+        matches.get_one::<String>("temp_rule_lifetime").unwrap(),
+        matches.get_one::<u64>("dispo_seconds").unwrap(),
     )
     .expect("Initialization failed: ");
     let result = app.run(terminal).await;
