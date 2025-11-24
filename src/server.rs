@@ -142,51 +142,43 @@ impl Ui for OpenSnitchUIGrpcServer {
         tokio::spawn(async move {
             loop {
                 let stream_grpc_event = in_stream.message().await;
-                match stream_grpc_event {
-                    Ok(nominal_grpc_event) => {
-                        match nominal_grpc_event {
-                            Some(notification) => {
-                                match notification.code() {
-                                    pb::NotificationReplyCode::Error => {
-                                        // Redirect error notifications to the alerts channel
-                                        let _ = tx.send(Event::App(Box::new(AppEvent::Alert(
-                                            alert::Alert {
-                                                timestamp: std::time::SystemTime::now(),
-                                                priority: alert::Priority::Medium,
-                                                r#type: alert::Type::Error,
-                                                what: alert::What::Generic,
-                                                msg: notification.data,
-                                            },
-                                        ))));
-                                    }
-                                    pb::NotificationReplyCode::Ok => {}
-                                }
-                            }
-                            None => {
-                                // Stream closed by peer
+                if let Ok(nominal_grpc_event) = stream_grpc_event {
+                    if let Some(notification) = nominal_grpc_event {
+                        match notification.code() {
+                            pb::NotificationReplyCode::Error => {
+                                // Redirect error notifications to the alerts channel
                                 let _ =
                                     tx.send(Event::App(Box::new(AppEvent::Alert(alert::Alert {
                                         timestamp: std::time::SystemTime::now(),
-                                        priority: alert::Priority::High,
-                                        r#type: alert::Type::Warning,
+                                        priority: alert::Priority::Medium,
+                                        r#type: alert::Type::Error,
                                         what: alert::What::Generic,
-                                        msg: String::from("gRPC stream closed by daemon"),
+                                        msg: notification.data,
                                     }))));
-                                break;
                             }
+                            pb::NotificationReplyCode::Ok => {}
                         }
-                    }
-                    Err(err) => {
-                        // gRPC error from peer on stream
+                    } else {
+                        // Stream closed by peer
                         let _ = tx.send(Event::App(Box::new(AppEvent::Alert(alert::Alert {
                             timestamp: std::time::SystemTime::now(),
                             priority: alert::Priority::High,
                             r#type: alert::Type::Warning,
                             what: alert::What::Generic,
-                            msg: format!("gRPC error from daemon: {}", err),
+                            msg: String::from("gRPC stream closed by daemon"),
                         }))));
                         break;
                     }
+                } else {
+                    // gRPC error from peer on stream
+                    let _ = tx.send(Event::App(Box::new(AppEvent::Alert(alert::Alert {
+                        timestamp: std::time::SystemTime::now(),
+                        priority: alert::Priority::High,
+                        r#type: alert::Type::Warning,
+                        what: alert::What::Generic,
+                        msg: format!("gRPC error from daemon: {}", stream_grpc_event.unwrap_err()),
+                    }))));
+                    break;
                 }
             }
         });
