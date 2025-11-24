@@ -22,25 +22,7 @@ impl Widget for &App {
             .title_alignment(Alignment::Center)
             .border_type(BorderType::Rounded);
 
-        let stats_text = format!(
-            "\
-                rx pings: {} | daemon version: {} | rules: {}\n\
-                uptime: {} | dns_responses: {} | connections: {}\n\
-                ignored: {} | accepted: {} | dropped: {}\n\
-                rule_hits: {} | rule_misses: {}",
-            self.rx_pings,
-            self.current_stats.daemon_version,
-            self.current_stats.rules,
-            self.current_stats.uptime,
-            self.current_stats.dns_responses,
-            self.current_stats.connections,
-            self.current_stats.ignored,
-            self.current_stats.accepted,
-            self.current_stats.dropped,
-            self.current_stats.rule_hits,
-            self.current_stats.rule_misses,
-        );
-
+        let stats_text = self.format_stats_panel();
         let stats_paragraph = Paragraph::new(stats_text)
             .block(stats_block)
             .fg(Color::Cyan)
@@ -62,39 +44,7 @@ impl Widget for &App {
                 Some(_) => Style::default().fg(Color::Yellow),
             });
 
-        let mut connection_text = String::default();
-        match &self.current_connection {
-            None => {}
-            Some(info) => {
-                // Don't just leave field blank if not populated.
-                let dst_host_string = if info.connection.dst_host.is_empty() {
-                    "-"
-                } else {
-                    &info.connection.dst_host
-                };
-
-                connection_text = format!(
-                    "\
-                src       {} / {}\n\
-                dst       {} / {}\n\
-                proto     {}\n\
-                dst host  {}\n\
-                uid       {}\n\
-                pid       {}\n\
-                ppath     {}",
-                    info.connection.src_ip,
-                    info.connection.src_port,
-                    info.connection.dst_ip,
-                    info.connection.dst_port,
-                    info.connection.protocol,
-                    dst_host_string,
-                    info.connection.user_id,
-                    info.connection.process_id,
-                    info.connection.process_path,
-                );
-            }
-        }
-
+        let connection_text = self.format_connection_panel();
         let connection_paragraph = Paragraph::new(connection_text)
             .block(connection_block)
             .bg(Color::Black);
@@ -153,5 +103,62 @@ impl Widget for &App {
             .alignment(Alignment::Center);
 
         controls_paragraph.render(areas[3], buf);
+    }
+}
+
+impl App {
+    fn format_stats_panel(&self) -> String {
+        format!(
+            "\
+                rx pings: {} | daemon version: {} | rules: {}\n\
+                uptime: {} | dns_responses: {} | connections: {}\n\
+                ignored: {} | accepted: {} | dropped: {}\n\
+                rule_hits: {} | rule_misses: {}",
+            self.rx_pings,
+            self.current_stats.daemon_version,
+            self.current_stats.rules,
+            self.current_stats.uptime,
+            self.current_stats.dns_responses,
+            self.current_stats.connections,
+            self.current_stats.ignored,
+            self.current_stats.accepted,
+            self.current_stats.dropped,
+            self.current_stats.rule_hits,
+            self.current_stats.rule_misses,
+        )
+    }
+
+    fn format_connection_panel(&self) -> String {
+        match &self.current_connection {
+            None => String::default(),
+            Some(info) => {
+                // Don't just leave field blank if not populated.
+                let dst_host_string = if info.connection.dst_host.is_empty() {
+                    "-"
+                } else {
+                    &info.connection.dst_host
+                };
+
+                format!(
+                    "\
+                src       {} / {}\n\
+                dst       {} / {}\n\
+                proto     {}\n\
+                dst host  {}\n\
+                uid       {}\n\
+                pid       {}\n\
+                ppath     {}",
+                    info.connection.src_ip,
+                    info.connection.src_port,
+                    info.connection.dst_ip,
+                    info.connection.dst_port,
+                    info.connection.protocol,
+                    dst_host_string,
+                    info.connection.user_id,
+                    info.connection.process_id,
+                    info.connection.process_path,
+                )
+            }
+        }
     }
 }

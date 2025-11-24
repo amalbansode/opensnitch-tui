@@ -1,6 +1,7 @@
 use clap::{Arg, Command};
 
-#[must_use] pub fn setup() -> Command {
+#[must_use]
+pub fn setup() -> Command {
     Command::new("opensnitch-tui")
     .author("Amal Bansode")
     .version("0.0.1")

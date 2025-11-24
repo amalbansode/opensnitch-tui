@@ -31,7 +31,8 @@ pub enum Operand {
 
 impl Operand {
     /// Enum as string for `OpenSnitch` daemon.
-    #[must_use] pub fn get_str(&self) -> &str {
+    #[must_use]
+    pub fn get_str(&self) -> &str {
         match self {
             Operand::ProcessId => "process.id",
             Operand::ProcessPath => "process.path",
@@ -71,7 +72,8 @@ pub enum RuleType {
 
 impl RuleType {
     /// Enum as string for `OpenSnitch` daemon.
-    #[must_use] pub fn get_str(&self) -> &str {
+    #[must_use]
+    pub fn get_str(&self) -> &str {
         match self {
             RuleType::List => "list",
             RuleType::Lists => "lists",
@@ -106,6 +108,8 @@ pub enum Action {
 
 impl Action {
     /// Validates input action and returns enum variant.
+    /// # Errors
+    /// Returns error if invalid enum variant.
     pub fn new(s: &str) -> Result<Action, BadOption> {
         match s {
             "allow" => Ok(Action::Allow),
@@ -130,7 +134,8 @@ impl Action {
     }
 
     /// Enum as string for `OpenSnitch` daemon.
-    #[must_use] pub fn get_str(&self) -> &str {
+    #[must_use]
+    pub fn get_str(&self) -> &str {
         match self {
             Action::Allow => "allow",
             Action::Deny => "deny",
@@ -169,6 +174,8 @@ pub enum Duration {
 
 impl Duration {
     /// Validates input duration and returns enum variant.
+    /// # Errors
+    /// Returns error if invalid enum variant.
     pub fn new(s: &str) -> Result<Duration, BadOption> {
         match s {
             "until restart" => Ok(Duration::UntilRestart),
@@ -187,7 +194,8 @@ impl Duration {
     }
 
     /// Enum as string for `OpenSnitch` daemon.
-    #[must_use] pub fn get_str(&self) -> &str {
+    #[must_use]
+    pub fn get_str(&self) -> &str {
         match self {
             Duration::UntilRestart => "until restart",
             Duration::Always => "always",
@@ -212,6 +220,8 @@ pub enum DefaultAction {
 
 impl DefaultAction {
     /// Validates input action and returns enum variant.
+    /// # Errors
+    /// Returns error if invalid enum variant.
     pub fn new(s: &str) -> Result<DefaultAction, BadOption> {
         match s {
             "allow" => Ok(DefaultAction::Allow),
@@ -224,7 +234,8 @@ impl DefaultAction {
     }
 
     /// Enum as string for `OpenSnitch` daemon.
-    #[must_use] pub fn get_str(&self) -> &str {
+    #[must_use]
+    pub fn get_str(&self) -> &str {
         match self {
             DefaultAction::Allow => "allow",
             DefaultAction::Deny => "deny",

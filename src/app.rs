@@ -54,6 +54,9 @@ pub struct App {
 
 impl App {
     /// Constructs a new instance of [`App`].
+    /// # Errors
+    /// Returns an error for invalid input arg.
+    #[allow(clippy::missing_panics_doc)]
     pub fn new(
         bind_string: &String,
         default_action_in: &String,
@@ -121,6 +124,10 @@ impl App {
     }
 
     /// Run the application's main loop.
+    /// # Errors
+    /// Doesn't nominally return any errors at runtime.
+    /// # Panics
+    /// Largely upon runtime invariant violation, could be fixed in future versions.
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
         // Rule receiver gets borrowed by the server
         let (rule_sender, rule_receiver) = mpsc::channel(1);
@@ -158,6 +165,8 @@ impl App {
     }
 
     /// Handles the key events and updates the state of [`App`].
+    /// # Errors
+    /// Not really...
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
         match key_event.code {
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
@@ -195,8 +204,8 @@ impl App {
     /// Handles the tick event of the terminal.
     pub fn tick(&mut self) {
         let now = std::time::SystemTime::now();
-        if self.current_connection.is_some()
-            && now >= self.current_connection.as_ref().unwrap().expiry_ts
+        if let Some(conn) = &self.current_connection
+            && now >= conn.expiry_ts
         {
             // The daemon's gRPC call should time out and take some default action
             // in the absence of a Rule created by us.
@@ -292,16 +301,15 @@ impl App {
         let pretty_proc_path = conn.process_path.clone().replace('/', "-");
         let maybe_operator_json = serde_json::to_string(&operators);
         // Shouldn't really happen due to serde_impl.rs, ideally something caught at build time.
-        assert!(maybe_operator_json.is_ok(), 
-                "Operator list JSON serialization failed: {}",
-                maybe_operator_json.unwrap_err()
-            );
+        assert!(
+            maybe_operator_json.is_ok(),
+            "Operator list JSON serialization failed: {}",
+            maybe_operator_json.unwrap_err()
+        );
 
         Some(pb::Rule {
             created: 0,
-            name: format!(
-                "{action_str}-{duration}-simple-via-tui-{pretty_proc_path}"
-            ),
+            name: format!("{action_str}-{duration}-simple-via-tui-{pretty_proc_path}"),
             description: String::default(),
             enabled: true,
             precedence: false,

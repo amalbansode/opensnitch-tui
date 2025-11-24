@@ -12,6 +12,9 @@ pub mod serde_impl;
 pub mod server;
 pub mod ui;
 
+/// Main.
+/// # Errors
+/// Returns an error if there was bad input at init.
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     let matches = cli::setup().get_matches();

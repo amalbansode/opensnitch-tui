@@ -10,7 +10,8 @@ pub enum Priority {
 }
 
 impl Priority {
-    #[must_use] pub fn new(v: i32) -> Priority {
+    #[must_use]
+    pub fn new(v: i32) -> Priority {
         match v {
             0 => Priority::Low,
             1 => Priority::Medium,
@@ -27,7 +28,8 @@ pub enum Type {
 }
 
 impl Type {
-    #[must_use] pub fn new(v: i32) -> Type {
+    #[must_use]
+    pub fn new(v: i32) -> Type {
         match v {
             0 => Type::Error,
             1 => Type::Warning,
@@ -48,9 +50,10 @@ pub enum What {
 }
 
 impl What {
-    #[must_use] pub fn new(v: i32) -> What {
+    #[must_use]
+    pub fn new(v: i32) -> What {
         match v {
-            0 => What::Generic,
+            // 0 is also generic, but caught by wildcard below.
             1 => What::ProcMonitor,
             2 => What::Firewall,
             3 => What::Connection,
@@ -72,7 +75,8 @@ pub struct Alert {
 }
 
 impl Alert {
-    #[must_use] pub fn new(ts: time::SystemTime, proto: &opensnitch_proto::pb::Alert) -> Alert {
+    #[must_use]
+    pub fn new(ts: time::SystemTime, proto: &opensnitch_proto::pb::Alert) -> Alert {
         let msg = match &proto.data {
             Some(data) => match data {
                 opensnitch_proto::pb::alert::Data::Text(v) => v.clone(),
