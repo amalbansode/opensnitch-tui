@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc;
 
 /// The frequency at which tick events are emitted.
-const TICK_FPS: f64 = 30.0;
+const TICK_FPS: f64 = 5.0;
 
 /// Representation of all possible events.
 #[derive(Clone, Debug)]
