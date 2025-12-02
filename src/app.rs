@@ -1,5 +1,5 @@
 use crate::alert;
-use crate::event::{AppEvent, ConnectionEvent, Event, EventHandler};
+use crate::event::{AppEvent, ConnectionEvent, Event, EventHandler, PingEvent};
 use crate::opensnitch_proto::pb;
 use crate::server::OpenSnitchUIServer;
 use ratatui::{
@@ -27,8 +27,10 @@ pub struct App {
     pub server: OpenSnitchUIServer,
     /// Rx Pings.
     pub rx_pings: u64,
+    /// Peer (`OpenSnitch` daemon) address.
+    pub peer: Option<std::net::SocketAddr>,
     /// Latest stats to present to UI.
-    pub current_stats: pb::Statistics,
+    pub current_stats: Option<pb::Statistics>,
     /// Vector of alerts
     pub current_alerts: VecDeque<alert::Alert>,
     /// Alert list head in UI.
@@ -108,9 +110,10 @@ impl App {
         Ok(Self {
             running: true,
             rx_pings: 0,
+            peer: None,
             events: events_handler,
             server,
-            current_stats: pb::Statistics::default(),
+            current_stats: None,
             current_alerts: VecDeque::new(),
             alert_list_render_offset: 0,
             notification_sender: Arc::new(Mutex::new(dummy_notification_sender)),
@@ -256,9 +259,14 @@ impl App {
     }
 
     /// Update peer stats from incoming Ping payload.
-    pub fn update_stats(&mut self, stats: pb::Statistics) {
+    /// TODO: Set a staleness threshold so we can clearly flag a disconnected peer.
+    /// For now, this can be simulated locally via:
+    /// iptables -A INPUT -p tcp --dport 50051 -j DROP
+    /// iptables -D INPUT -p tcp --dport 50051 -j DROP
+    pub fn update_stats(&mut self, ping_event: PingEvent) {
         self.rx_pings = self.rx_pings.saturating_add(1);
-        self.current_stats = stats;
+        self.peer = ping_event.peer;
+        self.current_stats = Some(ping_event.stats);
     }
 
     /// Server to daemon notifications under development.

@@ -24,7 +24,7 @@ pub enum Event {
 #[derive(Clone, Debug)]
 pub enum AppEvent {
     /// Update stats after receiving a gRPC Ping request.
-    Update(Statistics),
+    Update(PingEvent),
     /// Alert from opensnitch daemon.
     Alert(Alert),
     /// Daemon trapped a new connection that requires action.
@@ -33,6 +33,16 @@ pub enum AppEvent {
     TestNotify,
     /// Quit the application.
     Quit,
+}
+
+/// Wrapper for pings with extra metadata.
+#[derive(Clone, Debug)]
+pub struct PingEvent {
+    /// The peer addr+port that sent ping.
+    /// May be none if a domain socket was to be supported in the future.
+    pub peer: Option<std::net::SocketAddr>,
+    /// Ping payload - stats.
+    pub stats: Statistics,
 }
 
 /// Wrapper for connections with extra metadata.

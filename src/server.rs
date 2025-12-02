@@ -6,7 +6,7 @@ use tonic::Streaming;
 use tonic::{Request, Response, Status, transport::Server};
 
 use crate::alert;
-use crate::event::{AppEvent, ConnectionEvent, Event};
+use crate::event::{AppEvent, ConnectionEvent, Event, PingEvent};
 use crate::opensnitch_proto::pb;
 use crate::opensnitch_proto::pb::ui_server::Ui;
 use crate::opensnitch_proto::pb::ui_server::UiServer;
@@ -40,10 +40,13 @@ impl Ui for OpenSnitchUIGrpcServer {
         &self,
         request: Request<pb::PingRequest>,
     ) -> Result<Response<pb::PingReply>, Status> {
-        let stats: pb::Statistics = request.get_ref().stats.as_ref().unwrap().clone();
+        let event = PingEvent {
+            peer: request.remote_addr(),
+            stats: request.get_ref().stats.as_ref().unwrap().clone(),
+        };
         let _ = self
             .server_to_app_event_sender
-            .send(Event::App(Box::new(AppEvent::Update(stats))));
+            .send(Event::App(Box::new(AppEvent::Update(event))));
 
         let reply = pb::PingReply {
             id: request.get_ref().id,

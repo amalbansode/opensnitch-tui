@@ -17,8 +17,12 @@ impl Widget for &App {
             Constraint::Max(2),
         ])
         .split(area);
+        let stats_title = match self.peer {
+            Some(addr) => format!(" OpenSnitch ({addr}) "),
+            _ => String::from(" OpenSnitch "),
+        };
         let stats_block = Block::bordered()
-            .title(" OpenSnitch ")
+            .title(stats_title)
             .title_alignment(Alignment::Center)
             .border_type(BorderType::Rounded);
 
@@ -108,24 +112,29 @@ impl Widget for &App {
 
 impl App {
     fn format_stats_panel(&self) -> String {
-        format!(
-            "\
-                rx pings: {} | daemon version: {} | rules: {}\n\
-                uptime: {} | dns_responses: {} | connections: {}\n\
-                ignored: {} | accepted: {} | dropped: {}\n\
-                rule_hits: {} | rule_misses: {}",
-            self.rx_pings,
-            self.current_stats.daemon_version,
-            self.current_stats.rules,
-            self.current_stats.uptime,
-            self.current_stats.dns_responses,
-            self.current_stats.connections,
-            self.current_stats.ignored,
-            self.current_stats.accepted,
-            self.current_stats.dropped,
-            self.current_stats.rule_hits,
-            self.current_stats.rule_misses,
-        )
+        match &self.current_stats {
+            Some(stats) => {
+                format!(
+                    "\
+                        rx pings: {} | daemon version: {} | rules: {}\n\
+                        uptime: {} | dns_responses: {} | connections: {}\n\
+                        ignored: {} | accepted: {} | dropped: {}\n\
+                        rule_hits: {} | rule_misses: {}",
+                    self.rx_pings,
+                    stats.daemon_version,
+                    stats.rules,
+                    stats.uptime,
+                    stats.dns_responses,
+                    stats.connections,
+                    stats.ignored,
+                    stats.accepted,
+                    stats.dropped,
+                    stats.rule_hits,
+                    stats.rule_misses,
+                )
+            }
+            None => String::default(), // Consider a more useful message in the future?
+        }
     }
 
     fn format_connection_panel(&self) -> String {
