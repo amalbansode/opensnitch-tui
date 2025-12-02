@@ -328,6 +328,7 @@ impl App {
 
         Some(pb::Rule {
             created: 0,
+            // TODO: Leading slash gets turned into double-dash, may be annoying
             name: format!("{action_str}-{duration}-simple-via-tui-{pretty_proc_path}"),
             description: String::default(),
             enabled: true,
@@ -358,5 +359,124 @@ impl App {
             self.send_rule(rule);
             self.clear_connection();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::opensnitch_proto::pb::{Connection, Rule};
+    use std::time::SystemTime;
+
+    use super::*;
+
+    /// Convenience Alias for String-to-String Hashmap.
+    type S2SMap = std::collections::HashMap<String, String>;
+
+    /// Simple construction test.
+    #[tokio::test]
+    async fn test_new() {
+        let _ = App::new(
+            &"127.0.0.1:65534".to_string(),
+            &"deny".to_string(),
+            &"12h".to_string(),
+            &60,
+        )
+        .expect("new failed");
+    }
+
+    /// Test that making a rule with no "current connection" generates a noop.
+    #[tokio::test]
+    async fn test_make_rule_no_conn() {
+        let app = App::new(
+            &"127.0.0.1:65534".to_string(),
+            &"deny".to_string(),
+            &"12h".to_string(),
+            &60,
+        )
+        .expect("new failed");
+
+        assert!(app.current_connection.is_none());
+
+        let maybe_rule = app.make_rule(constants::Action::Allow, constants::Duration::Once);
+        assert!(maybe_rule.is_none());
+    }
+
+    /// Helper to make a fake connection object.
+    fn make_fake_connection() -> Connection {
+        Connection {
+            protocol: String::from("tcp"),
+            src_ip: String::from("192.168.0.3"),
+            src_port: 1337,
+            dst_ip: String::from("192.128.0.4"),
+            dst_host: String::from("suspicious.local"),
+            dst_port: 1338,
+            user_id: 1000,
+            process_id: 1339,
+            process_path: String::from("/usr/bin/hello"),
+            process_cwd: String::from("/home/spongebob"),
+            process_args: vec![],
+            process_env: S2SMap::default(),
+            process_checksums: S2SMap::default(),
+            process_tree: vec![],
+        }
+    }
+
+    /// Test that making a rule with a valid "current connection" generates something meaningful.
+    #[tokio::test]
+    async fn test_make_rule_has_conn() {
+        let mut app = App::new(
+            &"127.0.0.1:65534".to_string(),
+            &"deny".to_string(),
+            &"12h".to_string(),
+            &60,
+        )
+        .expect("new failed");
+
+        let fake_conn = make_fake_connection();
+        app.current_connection = Some(ConnectionEvent {
+            connection: fake_conn.clone(),
+            expiry_ts: SystemTime::now() + app.connection_disposition_timeout,
+        });
+
+        let maybe_rule = app
+            .make_rule(constants::Action::Allow, constants::Duration::Once)
+            .expect("missing rule");
+
+        // JSON blob representing the vector of operators we use for a rule.
+        // Checking this also acts as a high-level test for serde_json not producing
+        // unexpected output in the future.
+        let expected_str = "[{\"type\":\"simple\",\"operand\":\"user.id\",\"data\":\"1000\",\
+        \"sensitive\":false,\"list\":[]},{\"type\":\"simple\",\"operand\":\"process.path\",\
+        \"data\":\"/usr/bin/hello\",\"sensitive\":false,\"list\":[]},{\"type\":\"simple\",\
+        \"operand\":\"dest.ip\",\"data\":\"192.128.0.4\",\"sensitive\":false,\"list\":[]},\
+        {\"type\":\"simple\",\"operand\":\"dest.port\",\"data\":\"1338\",\"sensitive\":false,\
+        \"list\":[]},{\"type\":\"simple\",\"operand\":\"protocol\",\"data\":\"tcp\",\"sensitive\"\
+        :false,\"list\":[]}]";
+
+        let expected_rule = Rule {
+            created: 0,
+            name: String::from("allow-once-simple-via-tui--usr-bin-hello"),
+            description: String::default(),
+            enabled: true,
+            precedence: false,
+            nolog: false,
+            action: String::from("allow"),
+            duration: String::from("once"),
+            operator: Some(pb::Operator {
+                r#type: String::from(constants::RuleType::List.get_str()),
+                operand: String::from(constants::Operand::List.get_str()),
+                data: String::from(expected_str),
+                sensitive: false,
+                list: vec![
+                    operator_util::match_user_id(fake_conn.user_id),
+                    operator_util::match_proc_path(fake_conn.process_path.as_str()),
+                    operator_util::match_dst_ip(fake_conn.dst_ip.as_str()),
+                    operator_util::match_dst_port(fake_conn.dst_port),
+                    operator_util::match_protocol(fake_conn.protocol.as_str()),
+                ],
+            }),
+        };
+
+        assert_eq!(maybe_rule, expected_rule)
     }
 }

@@ -15,3 +15,26 @@ impl Serialize for Operator {
         state.end()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test Operator JSON serialization.
+    #[test]
+    fn test_operator_serialize() {
+        let input = Operator {
+            r#type: String::from("simple"),
+            operand: String::from("protocol"),
+            data: String::from("tcp"),
+            sensitive: false,
+            list: Vec::default(),
+        };
+        let output = serde_json::to_string(&input).expect("failed serialize struct to json");
+        let expected_output = String::from(
+            "{\"type\":\"simple\",\"operand\":\"protocol\",\
+            \"data\":\"tcp\",\"sensitive\":false,\"list\":[]}",
+        );
+        assert_eq!(output, expected_output);
+    }
+}
