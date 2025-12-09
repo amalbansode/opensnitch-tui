@@ -12,7 +12,7 @@ use crate::constants;
 const BUTTONS: &[(&str, constants::Action, constants::Duration)] = &[
     (" Allow(A) ", constants::Action::Allow, constants::Duration::UntilRestart),
     (" Deny(D) ", constants::Action::Deny, constants::Duration::UntilRestart),
-    (" Forever(J) ", constants::Action::Allow, constants::Duration::Always),
+    (" Always(J) ", constants::Action::Allow, constants::Duration::Always),
     (" Never(L) ", constants::Action::Deny, constants::Duration::Always),
 ];
 
