@@ -5,8 +5,8 @@ edition = "2024"
 
 [dependencies]
 futures = "0.3.31"
-crossterm = { version = "0.28.1", features = ["event-stream"] }
-ratatui = "0.29.0"
+crossterm = { version = "0.28.1", default-features = false, features = ["event-stream", "events"] }
+ratatui = { version = "0.29.0", default-features = false, features = ["crossterm"] }
 color-eyre = "0.6.3"
 tonic = "*"
 prost = "0.14.1"
@@ -19,3 +19,9 @@ clap = { version = "4.5.53", features = ["wrap_help"] }
 
 [build-dependencies]
 tonic-prost-build = "*"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "z"
