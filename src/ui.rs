@@ -12,9 +12,12 @@ use crate::constants;
 const BUTTONS: &[(&str, constants::Action, constants::Duration)] = &[
     (" Allow(A) ", constants::Action::Allow, constants::Duration::UntilRestart),
     (" Deny(D) ", constants::Action::Deny, constants::Duration::UntilRestart),
-    (" Allow Forever(J) ", constants::Action::Allow, constants::Duration::Always),
-    (" Deny Forever(L) ", constants::Action::Deny, constants::Duration::Always),
+    (" Forever(J) ", constants::Action::Allow, constants::Duration::Always),
+    (" Never(L) ", constants::Action::Deny, constants::Duration::Always),
 ];
+
+const BTN_SPACING: u16 = 1;
+const BTN_GROUP_SPACING: u16 = 2;
 
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
@@ -38,10 +41,18 @@ impl App {
         ])
         .split(area);
         let conn_inner = Block::bordered().inner(areas[1]);
-        // Buttons on last line of connection panel
-        let btn_y = conn_inner.y + conn_inner.height.saturating_sub(1);
-        let mut x = conn_inner.x;
-        for (label, action, duration) in BUTTONS {
+        // Buttons on second-to-last line of connection panel, centered
+        let btn_y = conn_inner.y + conn_inner.height.saturating_sub(2);
+        // Calculate total width: buttons + spacing (group spacing after index 1)
+        let total_width: u16 = BUTTONS.iter().enumerate()
+            .map(|(i, (l, _, _))| {
+                let spacing = if i == 1 { BTN_GROUP_SPACING } else if i < BUTTONS.len() - 1 { BTN_SPACING } else { 0 };
+                l.len() as u16 + spacing
+            })
+            .sum();
+        let start_x = conn_inner.x + conn_inner.width.saturating_sub(total_width) / 2;
+        let mut x = start_x;
+        for (i, (label, action, duration)) in BUTTONS.iter().enumerate() {
             let w = label.len() as u16;
             if x + w <= conn_inner.x + conn_inner.width {
                 self.buttons.push(Button {
@@ -50,7 +61,8 @@ impl App {
                     duration: *duration,
                 });
             }
-            x += w + 1; // 1 space between buttons
+            let spacing = if i == 1 { BTN_GROUP_SPACING } else { BTN_SPACING };
+            x += w + spacing;
         }
     }
 
@@ -95,7 +107,8 @@ impl App {
         let connection_text = self.format_connection_panel();
         let connection_paragraph = Paragraph::new(connection_text)
             .block(connection_block)
-            .bg(Color::Black);
+            .bg(Color::Black)
+            .alignment(Alignment::Center);
 
         connection_paragraph.render(areas[1], buf);
 
@@ -202,28 +215,19 @@ impl App {
         match &self.current_connection {
             None => String::default(),
             Some(info) => {
-                // Don't just leave field blank if not populated.
-                let dst_host_string = if info.connection.dst_host.is_empty() {
+                let dst_host = if info.connection.dst_host.is_empty() {
                     "-"
                 } else {
                     &info.connection.dst_host
                 };
-
+                let src = format!("{}:{}", info.connection.src_ip, info.connection.src_port);
+                let dst = format!("{}:{}", info.connection.dst_ip, info.connection.dst_port);
                 format!(
-                    "\
-                src       {} / {}\n\
-                dst       {} / {}\n\
-                proto     {}\n\
-                dst host  {}\n\
-                uid       {}\n\
-                pid       {}\n\
-                ppath     {}",
-                    info.connection.src_ip,
-                    info.connection.src_port,
-                    info.connection.dst_ip,
-                    info.connection.dst_port,
+                    "\n{}\n{} → {} [{}]\nuid:{} pid:{} {}",
+                    dst_host,
+                    src,
+                    dst,
                     info.connection.protocol,
-                    dst_host_string,
                     info.connection.user_id,
                     info.connection.process_id,
                     info.connection.process_path,
