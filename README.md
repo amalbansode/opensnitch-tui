@@ -38,7 +38,33 @@ The instructions above apply when the OpenSnitch daemon and GUI/TUI are running 
 
 **Note that only one of the GUI or TUI can run at one time, so kill the `opensnitch-ui` or `opensnitch-tui` process to run the other.**
 
-### Build and Run
+### Pre-built Binaries
+
+Download the latest release for your architecture:
+
+```sh
+# x86_64
+curl -fsSL https://github.com/amalbansode/opensnitch-tui/releases/latest/download/opensnitch-tui-linux-x86_64 -o opensnitch-tui
+chmod +x opensnitch-tui
+
+# aarch64 (ARM64)
+curl -fsSL https://github.com/amalbansode/opensnitch-tui/releases/latest/download/opensnitch-tui-linux-aarch64 -o opensnitch-tui
+chmod +x opensnitch-tui
+```
+
+Or in a Dockerfile:
+
+```dockerfile
+# x86_64
+RUN curl -fsSL https://github.com/amalbansode/opensnitch-tui/releases/latest/download/opensnitch-tui-linux-x86_64 -o /usr/local/bin/opensnitch-tui && \
+    chmod +x /usr/local/bin/opensnitch-tui
+
+# aarch64 (ARM64)
+RUN curl -fsSL https://github.com/amalbansode/opensnitch-tui/releases/latest/download/opensnitch-tui-linux-aarch64 -o /usr/local/bin/opensnitch-tui && \
+    chmod +x /usr/local/bin/opensnitch-tui
+```
+
+### Build from Source
 
 ```sh
 $ cd $THIS_REPO
