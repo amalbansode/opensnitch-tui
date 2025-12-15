@@ -66,6 +66,8 @@ RUN curl -fsSL https://github.com/amalbansode/opensnitch-tui/releases/latest/dow
 
 ### Build from Source
 
+Requires the protobuf compiler, [protoc](https://protobuf.dev/installation/).
+
 ```sh
 $ cd $THIS_REPO
 $ cargo build --release
