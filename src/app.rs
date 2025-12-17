@@ -49,7 +49,7 @@ pub struct App {
     /// gRPC server IP and port to bind to.
     bind_address: SocketAddr,
     /// Default action to be sent to connected daemons.
-    default_action: constants::DefaultAction,
+    pub default_action: constants::DefaultAction,
     /// Temporary rule lifetime.
     pub temp_rule_lifetime: constants::Duration,
     /// The duration up to which app waits for user to make a disposition

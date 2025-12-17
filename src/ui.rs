@@ -2,7 +2,7 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::Span,
+    text::{Line, Span},
     widgets::{Block, BorderType, List, ListItem, Paragraph, Widget},
 };
 
@@ -11,6 +11,9 @@ use crate::app::App;
 impl Widget for &mut App {
     /// Renders the user interface widgets.
     fn render(self, area: Rect, buf: &mut Buffer) {
+        // Get a clock reference timestamp.
+        let now = std::time::SystemTime::now();
+
         let areas = Layout::vertical([
             Constraint::Max(6),
             Constraint::Max(9),
@@ -36,7 +39,7 @@ impl Widget for &mut App {
         stats_paragraph.render(areas[0], buf);
 
         // Connection controls
-        let connection_block = Block::bordered()
+        let mut connection_block = Block::bordered()
             .title(" New Connections ")
             .title_alignment(Alignment::Center)
             .border_type(BorderType::Rounded)
@@ -48,6 +51,19 @@ impl Widget for &mut App {
                 None => Style::default().fg(Color::Cyan),
                 Some(_) => Style::default().fg(Color::Yellow),
             });
+        // Also render a "bottom title" with countdown to dispo the connection.
+        if let Some(conn) = &self.current_connection
+            && let Ok(remaining_time) = conn.expiry_ts.duration_since(now)
+        {
+            connection_block = connection_block.title_bottom(
+                Line::from(format!(
+                    " {}s to disposition, else {} ",
+                    remaining_time.as_secs(),
+                    self.default_action.get_str()
+                ))
+                .alignment(Alignment::Right),
+            );
+        }
 
         let connection_text = self.format_connection_panel();
         let connection_paragraph = Paragraph::new(connection_text)
@@ -61,9 +77,6 @@ impl Widget for &mut App {
             .title(format!(" Alerts ({}) ", self.current_alerts.len()))
             .title_alignment(Alignment::Center)
             .border_type(BorderType::Rounded);
-
-        // Get a clock reference timestamp to compute alert ages.
-        let now = std::time::SystemTime::now();
 
         // We want to render the alert list from some stateful head index,
         // so get an iterator and skip forward to that head.
