@@ -32,5 +32,13 @@ pub fn setup() -> Command {
         .default_value("12h")
         .help("Lifetime of temporary rules created by TUI.")
     )
+    .arg(
+        Arg::new("rule_presets")
+        .long("rule-presets")
+        .default_value("exact_user_id,exact_ppath,exact_dst_ip,exact_dst_port,exact_protocol")
+         // TODO: Single source of truth from operator_util.rs?
+        .help("Comma-separated list of presets to use in rules created by TUI. \n\
+        Available: [exact_user_id | exact_ppath | exact_dst_ip | exact_dst_port | exact_protocol | <exact_hostname|any_subdomain_hostname> ]\n")
+    )
     .max_term_width(100)
 }

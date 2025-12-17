@@ -75,8 +75,9 @@ pub struct Alert {
 }
 
 impl Alert {
+    /// Create an alert keyed off protobuf message.
     #[must_use]
-    pub fn new(ts: time::SystemTime, proto: &opensnitch_proto::pb::Alert) -> Alert {
+    pub fn from_proto(ts: time::SystemTime, proto: &opensnitch_proto::pb::Alert) -> Alert {
         let msg = match &proto.data {
             Some(data) => match data {
                 opensnitch_proto::pb::alert::Data::Text(v) => v.clone(),
@@ -91,6 +92,18 @@ impl Alert {
             r#type: Type::new(proto.r#type),
             what: What::new(proto.what),
             msg,
+        }
+    }
+
+    /// Create a simple alert.
+    #[must_use]
+    pub fn create_simple(ts: time::SystemTime, msg: &str) -> Alert {
+        Alert {
+            timestamp: ts,
+            priority: Priority::Low,
+            r#type: Type::Warning,
+            what: What::Generic,
+            msg: msg.to_string(),
         }
     }
 }

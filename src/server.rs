@@ -62,10 +62,9 @@ impl Ui for OpenSnitchUIGrpcServer {
         let alert = request.get_ref();
         let _ = self
             .server_to_app_event_sender
-            .send(Event::App(Box::new(AppEvent::Alert(alert::Alert::new(
-                std::time::SystemTime::now(),
-                alert,
-            )))));
+            .send(Event::App(Box::new(AppEvent::Alert(
+                alert::Alert::from_proto(std::time::SystemTime::now(), alert),
+            ))));
 
         let reply = pb::MsgResponse {
             id: request.get_ref().id,

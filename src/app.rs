@@ -1,4 +1,4 @@
-use crate::alert;
+use crate::alert::{self, Alert};
 use crate::event::{AppEvent, ConnectionEvent, Event, EventHandler, PingEvent};
 use crate::opensnitch_proto::pb;
 use crate::server::OpenSnitchUIServer;
@@ -8,10 +8,11 @@ use ratatui::{
 };
 
 use crate::constants;
-use crate::operator_util;
+use crate::operator_util::{self, PresetCombination};
 
 use std::collections::VecDeque;
 use std::net::SocketAddr;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 use tonic::Status;
@@ -52,6 +53,8 @@ pub struct App {
     /// The duration up to which app waits for user to make a disposition
     /// (allow/deny) on a trapped connection.
     connection_disposition_timeout: std::time::Duration,
+    /// Combination of preset operators to use when creating rules.
+    preset_combo: PresetCombination,
 }
 
 impl App {
@@ -64,6 +67,7 @@ impl App {
         default_action_in: &String,
         temp_rule_lifetime: &String,
         connection_disposition_timeout_in: &u64,
+        rule_presets: &str,
     ) -> Result<Self, String> {
         if bind_string.starts_with("unix") {
             return Err(String::from("Unix domain sockets not supported"));
@@ -99,6 +103,12 @@ impl App {
         let connection_disposition_timeout =
             std::time::Duration::from_secs(*connection_disposition_timeout_in);
 
+        if rule_presets.is_empty() {
+            return Err("Rule preset operators cannot be empty".to_string());
+            // Edge cases with invalid elements should be handled by from_str below.
+        }
+        let preset_combo = operator_util::PresetCombination::from_str(rule_presets)?;
+
         let events_handler = EventHandler::new();
         let server = OpenSnitchUIServer::default();
 
@@ -123,6 +133,7 @@ impl App {
             default_action: maybe_default_action.unwrap(),
             temp_rule_lifetime: maybe_temp_rule_lifetime.unwrap(),
             connection_disposition_timeout,
+            preset_combo,
         })
     }
 
@@ -296,8 +307,6 @@ impl App {
     }
 
     /// Generate a rule for the current connection being handled by this server.
-    /// Matches on user ID && process path && IP dst && l4 port && l4 protocol.
-    /// TODO: Consider including process hash for extra strictness.
     /// Returns `none` if there is no current connection.
     /// * `is_allow`: Whether the rule for this connection should allow or deny the flow.
     fn make_rule(
@@ -310,18 +319,25 @@ impl App {
 
         let conn = &self.current_connection.as_ref().unwrap().connection;
 
-        // Build up an array of "safe"ish default operators to match this process's
-        // specific connection, though this can obviously be better validated/configured
-        // in the future.
-        // This could have also been implemented with enum+trait magic, but using a simple
-        // Operator factory lets us pass this vector into the larger Rule we are creating.
-        let operators = vec![
-            operator_util::match_user_id(conn.user_id),
-            operator_util::match_proc_path(&conn.process_path),
-            operator_util::match_dst_ip(&conn.dst_ip),
-            operator_util::match_dst_port(conn.dst_port),
-            operator_util::match_protocol(&conn.protocol),
-        ];
+        // Fill in all the inputs to generator with best effort.
+        let inputs = operator_util::GeneratedOperatorsInputs {
+            user_id: Some(conn.user_id),
+            ppath: Some(conn.process_path.clone()),
+            dst_ip: Some(conn.dst_ip.clone()),
+            dst_port: Some(conn.dst_port),
+            protocol: Some(conn.protocol.clone()),
+            hostname: if conn.dst_host.is_empty() {
+                None
+            } else {
+                Some(conn.dst_host.clone())
+            },
+        };
+
+        // Do the work - generate populated operator list based on desired presets and given inputs.
+        let operators = inputs.generate_operators(&self.preset_combo);
+        if operators.is_empty() {
+            return None;
+        }
 
         let action_str = action.get_str();
         let duration = String::from(duration.get_str());
@@ -366,6 +382,12 @@ impl App {
         if let Some(rule) = self.make_rule(action, duration) {
             self.send_rule(rule);
             self.clear_connection();
+        } else {
+            // Send an alert to self that no rule was generated due to missing data.
+            self.current_alerts.push_back(Alert::create_simple(
+                std::time::SystemTime::now(),
+                "No rule created due to missing data",
+            ));
         }
     }
 }
@@ -388,6 +410,7 @@ mod tests {
             &"deny".to_string(),
             &"12h".to_string(),
             &60,
+            &"exact_dst_ip".to_string(),
         )
         .expect("new failed");
     }
@@ -400,6 +423,7 @@ mod tests {
             &"deny".to_string(),
             &"12h".to_string(),
             &60,
+            &"exact_dst_ip".to_string(),
         )
         .expect("new failed");
 
@@ -437,6 +461,7 @@ mod tests {
             &"deny".to_string(),
             &"12h".to_string(),
             &60,
+            &"exact_dst_ip".to_string(),
         )
         .expect("new failed");
 
@@ -453,13 +478,7 @@ mod tests {
         // JSON blob representing the vector of operators we use for a rule.
         // Checking this also acts as a high-level test for serde_json not producing
         // unexpected output in the future.
-        let expected_str = "[{\"type\":\"simple\",\"operand\":\"user.id\",\"data\":\"1000\",\
-        \"sensitive\":false,\"list\":[]},{\"type\":\"simple\",\"operand\":\"process.path\",\
-        \"data\":\"/usr/bin/hello\",\"sensitive\":false,\"list\":[]},{\"type\":\"simple\",\
-        \"operand\":\"dest.ip\",\"data\":\"192.128.0.4\",\"sensitive\":false,\"list\":[]},\
-        {\"type\":\"simple\",\"operand\":\"dest.port\",\"data\":\"1338\",\"sensitive\":false,\
-        \"list\":[]},{\"type\":\"simple\",\"operand\":\"protocol\",\"data\":\"tcp\",\"sensitive\"\
-        :false,\"list\":[]}]";
+        let expected_str = "[{\"type\":\"simple\",\"operand\":\"dest.ip\",\"data\":\"192.128.0.4\",\"sensitive\":false,\"list\":[]}]";
 
         let expected_rule = Rule {
             created: 0,
@@ -475,13 +494,13 @@ mod tests {
                 operand: String::from(constants::Operand::List.get_str()),
                 data: String::from(expected_str),
                 sensitive: false,
-                list: vec![
-                    operator_util::match_user_id(fake_conn.user_id),
-                    operator_util::match_proc_path(fake_conn.process_path.as_str()),
-                    operator_util::match_dst_ip(fake_conn.dst_ip.as_str()),
-                    operator_util::match_dst_port(fake_conn.dst_port),
-                    operator_util::match_protocol(fake_conn.protocol.as_str()),
-                ],
+                list: vec![pb::Operator {
+                    r#type: String::from(constants::RuleType::Simple.get_str()),
+                    operand: String::from(constants::Operand::DstIp.get_str()),
+                    data: "192.128.0.4".to_string(),
+                    sensitive: false,
+                    list: Vec::default(),
+                }],
             }),
         };
 

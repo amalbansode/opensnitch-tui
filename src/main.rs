@@ -26,6 +26,7 @@ async fn main() -> color_eyre::Result<()> {
         matches.get_one::<String>("default_action").unwrap(),
         matches.get_one::<String>("temp_rule_lifetime").unwrap(),
         matches.get_one::<u64>("dispo_seconds").unwrap(),
+        matches.get_one::<String>("rule_presets").unwrap(),
     )
     .expect("Initialization failed: ");
     let result = app.run(terminal).await;
