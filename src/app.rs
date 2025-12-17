@@ -23,11 +23,33 @@ use tonic::Status;
 #[derive(Debug)]
 pub struct App {
     /// Is the application running?
-    pub running: bool,
+    running: bool,
     /// Event handler.
-    pub events: EventHandler,
+    events: EventHandler,
     /// Server
-    pub server: OpenSnitchUIServer,
+    server: OpenSnitchUIServer,
+    /// Channel sender to generate notifications for a daemon towards.
+    /// The sender handle gets replaced to the latest client connection.
+    /// Race protection enabled by the mutex.
+    notification_sender: Arc<Mutex<mpsc::Sender<Result<pb::Notification, Status>>>>,
+    /// Rule sender.
+    rule_sender: mpsc::Sender<pb::Rule>,
+    /// gRPC server IP and port to bind to.
+    bind_address: SocketAddr,
+    /// The duration up to which app waits for user to make a disposition
+    /// (allow/deny) on a trapped connection.
+    connection_disposition_timeout: std::time::Duration,
+    /// Combination of preset operators to use when creating rules.
+    preset_combo: PresetCombination,
+    /// Shared state between TUI and app driver.
+    tui_state: TuiState,
+    /// Shared **mutable** state between app driver and TUI rendering.
+    tui_mut_state: TuiMutState,
+}
+
+/// Shared state between TUI and app driver.
+#[derive(Debug)]
+pub struct TuiState {
     /// Rx Pings.
     pub rx_pings: u64,
     /// Peer (`OpenSnitch` daemon) address.
@@ -38,28 +60,22 @@ pub struct App {
     pub current_alerts: VecDeque<alert::Alert>,
     /// Alert list head in UI.
     pub alert_list_render_offset: usize,
-    /// Channel sender to generate notifications for a daemon towards.
-    /// The sender handle gets replaced to the latest client connection.
-    /// Race protection enabled by the mutex.
-    pub notification_sender: Arc<Mutex<mpsc::Sender<Result<pb::Notification, Status>>>>,
     /// Info on the current connection awaiting a rule determination.
     pub current_connection: Option<ConnectionEvent>,
-    /// Rule sender.
-    pub rule_sender: mpsc::Sender<pb::Rule>,
-    /// gRPC server IP and port to bind to.
-    bind_address: SocketAddr,
     /// Default action to be sent to connected daemons.
     pub default_action: constants::DefaultAction,
     /// Temporary rule lifetime.
     pub temp_rule_lifetime: constants::Duration,
-    /// The duration up to which app waits for user to make a disposition
-    /// (allow/deny) on a trapped connection.
-    connection_disposition_timeout: std::time::Duration,
-    /// Combination of preset operators to use when creating rules.
-    preset_combo: PresetCombination,
     /// UI footer `Controls` list.
     pub controls: Vec<Controls>,
-    /// Controls footer area as determined by
+}
+
+/// Shared mutable state between both TUI and app driver.
+#[derive(Debug, Default)]
+pub struct TuiMutState {
+    /// Connection panel area as determined by ratatui lib.
+    pub connection_area: Rect,
+    /// Controls footer area as determined by ratatui lib.
     pub controls_area: Rect,
 }
 
@@ -177,23 +193,28 @@ impl App {
 
         Ok(Self {
             running: true,
-            rx_pings: 0,
-            peer: None,
             events: events_handler,
             server,
-            current_stats: None,
-            current_alerts: VecDeque::new(),
-            alert_list_render_offset: 0,
             notification_sender: Arc::new(Mutex::new(dummy_notification_sender)),
-            current_connection: None,
             rule_sender: dummy_rule_sender,
             bind_address: maybe_bind_addr.unwrap(),
-            default_action: maybe_default_action.unwrap(),
-            temp_rule_lifetime: maybe_temp_rule_lifetime.unwrap(),
             connection_disposition_timeout,
             preset_combo,
-            controls,
-            controls_area: Rect::default(),
+            tui_state: TuiState {
+                rx_pings: 0,
+                peer: None,
+                current_stats: None,
+                current_alerts: VecDeque::new(),
+                alert_list_render_offset: 0,
+                current_connection: None,
+                default_action: maybe_default_action.unwrap(),
+                temp_rule_lifetime: maybe_temp_rule_lifetime.unwrap(),
+                controls,
+            },
+            tui_mut_state: TuiMutState {
+                connection_area: Rect::default(),
+                controls_area: Rect::default(),
+            },
         })
     }
 
@@ -211,7 +232,7 @@ impl App {
             self.events.sender.clone(),
             &self.notification_sender,
             rule_receiver,
-            self.default_action,
+            self.tui_state.default_action,
             self.connection_disposition_timeout,
         );
         // Only need a draw if:
@@ -244,7 +265,9 @@ impl App {
                     draw_needed = true;
                     match *app_event {
                         AppEvent::Update(stats) => self.update_stats(stats),
-                        AppEvent::Alert(alert) => self.current_alerts.push_back(alert.clone()),
+                        AppEvent::Alert(alert) => {
+                            self.tui_state.current_alerts.push_back(alert.clone());
+                        }
                         AppEvent::AskRule(evt) => self.update_connection(evt),
                         AppEvent::TestNotify => self.test_notify().await,
                         AppEvent::Quit => self.quit(),
@@ -252,7 +275,13 @@ impl App {
                 }
             }
             if draw_needed {
-                terminal.draw(|frame| frame.render_widget(&mut self, frame.area()))?;
+                terminal.draw(|frame| {
+                    frame.render_stateful_widget(
+                        &self.tui_state,
+                        frame.area(),
+                        &mut self.tui_mut_state,
+                    );
+                })?;
                 draw_needed = false;
             }
         }
@@ -269,10 +298,13 @@ impl App {
             }
             KeyCode::Char('t' | 'T') => self.events.send(AppEvent::TestNotify),
             KeyCode::Char('a' | 'A') => {
-                self.make_and_send_rule(constants::Action::Allow, self.temp_rule_lifetime);
+                self.make_and_send_rule(
+                    constants::Action::Allow,
+                    self.tui_state.temp_rule_lifetime,
+                );
             }
             KeyCode::Char('d' | 'D') => {
-                self.make_and_send_rule(constants::Action::Deny, self.temp_rule_lifetime);
+                self.make_and_send_rule(constants::Action::Deny, self.tui_state.temp_rule_lifetime);
             }
             KeyCode::Char('j' | 'J') => {
                 self.make_and_send_rule(constants::Action::Allow, constants::Duration::Always);
@@ -281,13 +313,14 @@ impl App {
                 self.make_and_send_rule(constants::Action::Deny, constants::Duration::Always);
             }
             KeyCode::Up => {
-                self.alert_list_render_offset = self.alert_list_render_offset.saturating_sub(1);
+                self.tui_state.alert_list_render_offset =
+                    self.tui_state.alert_list_render_offset.saturating_sub(1);
             }
             KeyCode::Down => {
-                if !self.current_alerts.is_empty() {
-                    self.alert_list_render_offset = std::cmp::min(
-                        self.alert_list_render_offset.saturating_add(1),
-                        self.current_alerts.len() - 1,
+                if !self.tui_state.current_alerts.is_empty() {
+                    self.tui_state.alert_list_render_offset = std::cmp::min(
+                        self.tui_state.alert_list_render_offset.saturating_add(1),
+                        self.tui_state.current_alerts.len() - 1,
                     );
                 }
             }
@@ -302,13 +335,14 @@ impl App {
     pub fn handle_mouse_events(&mut self, mouse_event: MouseEvent) -> color_eyre::Result<bool> {
         let mut clicked_control = None;
         if self
+            .tui_mut_state
             .controls_area
             .contains(Position::new(mouse_event.column, mouse_event.row))
         {
             // Controls footer faux button group is left aligned in TUI, so use a simple
             // accumulator pattern to determine which control overlaps with click coords.
             let mut column_accumulator: usize = 0;
-            for control in &self.controls {
+            for control in &self.tui_state.controls {
                 let lb = column_accumulator;
                 column_accumulator += control.get_button_width();
                 let rb = column_accumulator;
@@ -346,7 +380,7 @@ impl App {
     pub fn tick(&mut self) -> bool {
         let mut did_work = false;
         let now = std::time::SystemTime::now();
-        if let Some(conn) = &self.current_connection
+        if let Some(conn) = &self.tui_state.current_connection
             && now >= conn.expiry_ts
         {
             // The daemon's gRPC call should time out and take some default action
@@ -356,18 +390,20 @@ impl App {
         }
 
         // Routinely expire alerts.
-        match self.current_alerts.front() {
+        match self.tui_state.current_alerts.front() {
             None => {}
             Some(alert) => {
                 if let Ok(age) = now.duration_since(alert.timestamp) {
                     // Max alert duration is 60s, could be adjustable if needed
                     if age.as_secs() >= 60 {
                         // Pop this off but also correct the render offset in case it's set to back of list.
-                        if self.alert_list_render_offset == (self.current_alerts.len() - 1) {
-                            self.alert_list_render_offset =
-                                self.alert_list_render_offset.saturating_sub(1);
+                        if self.tui_state.alert_list_render_offset
+                            == (self.tui_state.current_alerts.len() - 1)
+                        {
+                            self.tui_state.alert_list_render_offset =
+                                self.tui_state.alert_list_render_offset.saturating_sub(1);
                         }
-                        self.current_alerts.pop_front();
+                        self.tui_state.current_alerts.pop_front();
                         did_work = true;
                     }
                 }
@@ -388,9 +424,9 @@ impl App {
     /// iptables -A INPUT -p tcp --dport 50051 -j DROP
     /// iptables -D INPUT -p tcp --dport 50051 -j DROP
     pub fn update_stats(&mut self, ping_event: PingEvent) {
-        self.rx_pings = self.rx_pings.saturating_add(1);
-        self.peer = ping_event.peer;
-        self.current_stats = Some(ping_event.stats);
+        self.tui_state.rx_pings = self.tui_state.rx_pings.saturating_add(1);
+        self.tui_state.peer = ping_event.peer;
+        self.tui_state.current_stats = Some(ping_event.stats);
     }
 
     /// Server to daemon notifications under development.
@@ -411,12 +447,12 @@ impl App {
 
     /// Update connection holder with latest inbound event.
     pub fn update_connection(&mut self, evt: ConnectionEvent) {
-        self.current_connection = Some(evt);
+        self.tui_state.current_connection = Some(evt);
     }
 
     /// Clear connection holder.
     pub fn clear_connection(&mut self) {
-        self.current_connection = None;
+        self.tui_state.current_connection = None;
     }
 
     /// Generate a rule for the current connection being handled by this server.
@@ -428,9 +464,7 @@ impl App {
         duration: constants::Duration,
     ) -> Option<pb::Rule> {
         // Noop if there's no connection trapped.
-        self.current_connection.as_ref()?;
-
-        let conn = &self.current_connection.as_ref().unwrap().connection;
+        let conn: &pb::Connection = &self.tui_state.current_connection.as_ref()?.connection;
 
         // Fill in all the inputs to generator with best effort.
         let inputs = operator_util::GeneratedOperatorsInputs {
@@ -497,10 +531,12 @@ impl App {
             self.clear_connection();
         } else {
             // Send an alert to self that no rule was generated due to missing data.
-            self.current_alerts.push_back(Alert::create_simple(
-                std::time::SystemTime::now(),
-                "No rule created due to missing data",
-            ));
+            self.tui_state
+                .current_alerts
+                .push_back(Alert::create_simple(
+                    std::time::SystemTime::now(),
+                    "No rule created due to lack of connection data",
+                ));
         }
     }
 }
@@ -540,7 +576,7 @@ mod tests {
         )
         .expect("new failed");
 
-        assert!(app.current_connection.is_none());
+        assert!(app.tui_state.current_connection.is_none());
 
         let maybe_rule = app.make_rule(constants::Action::Allow, constants::Duration::Once);
         assert!(maybe_rule.is_none());
@@ -579,7 +615,7 @@ mod tests {
         .expect("new failed");
 
         let fake_conn = make_fake_connection();
-        app.current_connection = Some(ConnectionEvent {
+        app.tui_state.current_connection = Some(ConnectionEvent {
             connection: fake_conn.clone(),
             expiry_ts: SystemTime::now() + app.connection_disposition_timeout,
         });

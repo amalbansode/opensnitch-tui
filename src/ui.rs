@@ -3,14 +3,16 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, List, ListItem, Paragraph, Widget},
+    widgets::{Block, BorderType, List, ListItem, Paragraph, StatefulWidget, Widget},
 };
 
-use crate::app::App;
+use crate::app::{TuiMutState, TuiState};
 
-impl Widget for &mut App {
+impl StatefulWidget for &TuiState {
+    type State = TuiMutState;
+
     /// Renders the user interface widgets.
-    fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         // Get a clock reference timestamp.
         let now = std::time::SystemTime::now();
 
@@ -105,7 +107,7 @@ impl Widget for &mut App {
             .block(alerts_block)
             .fg(Color::Cyan)
             .bg(Color::Black);
-        list.render(areas[2], buf);
+        Widget::render(list, areas[2], buf);
 
         // Controls footer
         let mut controls_spans = Vec::new();
@@ -128,11 +130,11 @@ impl Widget for &mut App {
             .alignment(Alignment::Left);
 
         controls_paragraph.render(areas[3], buf);
-        self.controls_area = areas[3];
+        state.controls_area = areas[3];
     }
 }
 
-impl App {
+impl TuiState {
     fn format_stats_panel(&self) -> String {
         match &self.current_stats {
             Some(stats) => {
