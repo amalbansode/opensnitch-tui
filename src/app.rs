@@ -2,6 +2,8 @@ use crate::alert::{self, Alert};
 use crate::event::{AppEvent, ConnectionEvent, Event, EventHandler, PingEvent};
 use crate::opensnitch_proto::pb;
 use crate::server::OpenSnitchUIServer;
+use crossterm::event::MouseEvent;
+use ratatui::layout::{Position, Rect};
 use ratatui::{
     DefaultTerminal,
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
@@ -55,6 +57,54 @@ pub struct App {
     connection_disposition_timeout: std::time::Duration,
     /// Combination of preset operators to use when creating rules.
     preset_combo: PresetCombination,
+    /// UI footer `Controls` list.
+    pub controls: Vec<Controls>,
+    /// Controls footer area as determined by
+    pub controls_area: Rect,
+}
+
+/// Enum of controls and any associated data at the footer of TUI.
+#[derive(Clone, Debug, Copy)]
+pub enum Controls {
+    Quit,
+    AllowTemp(constants::Duration),
+    DenyTemp(constants::Duration),
+    AllowForever,
+    DenyForever,
+}
+
+impl Controls {
+    /// Get keybinding string.
+    #[must_use]
+    pub fn get_keybind_str(&self) -> &str {
+        // Add in whitespace margins here for easy math later.
+        match self {
+            Self::Quit => " Ctrl+C ",
+            Self::AllowTemp(_) => " A ",
+            Self::DenyTemp(_) => " D ",
+            Self::AllowForever => " J ",
+            Self::DenyForever => " L ",
+        }
+    }
+
+    /// Get the "control"/description.
+    #[must_use]
+    pub fn get_control_str(&self) -> String {
+        // Add in whitespace margins here for easy math later.
+        match self {
+            Self::Quit => String::from(" Quit "),
+            Self::AllowTemp(duration) => format!(" Allow {} ", duration.get_str()),
+            Self::DenyTemp(duration) => format!(" Deny {} ", duration.get_str()),
+            Self::AllowForever => String::from(" Allow Forever "),
+            Self::DenyForever => String::from(" Deny Forever "),
+        }
+    }
+
+    /// Return the sum of keybind strlen and control strlen.
+    #[must_use]
+    pub fn get_button_width(&self) -> usize {
+        self.get_keybind_str().len() + self.get_control_str().len()
+    }
 }
 
 impl App {
@@ -117,6 +167,14 @@ impl App {
         let (dummy_notification_sender, _) = mpsc::channel(1);
         let (dummy_rule_sender, _) = mpsc::channel(1);
 
+        let controls = vec![
+            Controls::Quit,
+            Controls::AllowTemp(maybe_temp_rule_lifetime.clone().unwrap()),
+            Controls::DenyTemp(maybe_temp_rule_lifetime.clone().unwrap()),
+            Controls::AllowForever,
+            Controls::DenyForever,
+        ];
+
         Ok(Self {
             running: true,
             rx_pings: 0,
@@ -134,6 +192,8 @@ impl App {
             temp_rule_lifetime: maybe_temp_rule_lifetime.unwrap(),
             connection_disposition_timeout,
             preset_combo,
+            controls,
+            controls_area: Rect::default(),
         })
     }
 
@@ -170,6 +230,14 @@ impl App {
                         draw_needed = true;
                         self.handle_key_events(key_event)?;
                     }
+                    crossterm::event::Event::Mouse(mouse_event)
+                        if mouse_event.kind
+                            == crossterm::event::MouseEventKind::Up(
+                                crossterm::event::MouseButton::Left,
+                            ) =>
+                    {
+                        draw_needed |= self.handle_mouse_events(mouse_event)?;
+                    }
                     _ => {}
                 },
                 Event::App(app_event) => {
@@ -184,14 +252,14 @@ impl App {
                 }
             }
             if draw_needed {
-                terminal.draw(|frame| frame.render_widget(&self, frame.area()))?;
+                terminal.draw(|frame| frame.render_widget(&mut self, frame.area()))?;
                 draw_needed = false;
             }
         }
         Ok(())
     }
 
-    /// Handles the key events and updates the state of [`App`].
+    /// Handles key events and updates the state of [`App`].
     /// # Errors
     /// Not really...
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
@@ -226,6 +294,51 @@ impl App {
             _ => {}
         }
         Ok(())
+    }
+
+    /// Handles mouse events and updates the state of [`App`].
+    /// # Errors
+    /// Not really...
+    pub fn handle_mouse_events(&mut self, mouse_event: MouseEvent) -> color_eyre::Result<bool> {
+        let mut clicked_control = None;
+        if self
+            .controls_area
+            .contains(Position::new(mouse_event.column, mouse_event.row))
+        {
+            // Controls footer faux button group is left aligned in TUI, so use a simple
+            // accumulator pattern to determine which control overlaps with click coords.
+            let mut column_accumulator: usize = 0;
+            for control in &self.controls {
+                let lb = column_accumulator;
+                column_accumulator += control.get_button_width();
+                let rb = column_accumulator;
+                if usize::from(mouse_event.column) >= lb && usize::from(mouse_event.column) < rb {
+                    clicked_control = Some(control);
+                    break;
+                }
+            }
+        }
+
+        if let Some(control) = clicked_control {
+            match control {
+                Controls::Quit => self.events.send(AppEvent::Quit),
+                Controls::AllowTemp(duration) => {
+                    self.make_and_send_rule(constants::Action::Allow, *duration);
+                }
+                Controls::DenyTemp(duration) => {
+                    self.make_and_send_rule(constants::Action::Deny, *duration);
+                }
+                Controls::AllowForever => {
+                    self.make_and_send_rule(constants::Action::Allow, constants::Duration::Always);
+                }
+                Controls::DenyForever => {
+                    self.make_and_send_rule(constants::Action::Deny, constants::Duration::Always);
+                }
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Handles the tick event of the terminal.
