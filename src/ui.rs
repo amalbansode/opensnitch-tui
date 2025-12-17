@@ -2,19 +2,20 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
+    text::Span,
     widgets::{Block, BorderType, List, ListItem, Paragraph, Widget},
 };
 
 use crate::app::App;
 
-impl Widget for &App {
+impl Widget for &mut App {
     /// Renders the user interface widgets.
     fn render(self, area: Rect, buf: &mut Buffer) {
         let areas = Layout::vertical([
             Constraint::Max(6),
             Constraint::Max(9),
             Constraint::Max(5),
-            Constraint::Max(2),
+            Constraint::Max(1),
         ])
         .split(area);
         let stats_title = match self.peer {
@@ -94,19 +95,27 @@ impl Widget for &App {
         list.render(areas[2], buf);
 
         // Controls footer
-        let controls_text = format!(
-            "\
-        `ctrl+C` → quit | `A/D` → (allow/deny) connection {}\n\
-        `J/L` → (allow/deny) connection forever | `up/down` → scroll alerts",
-            self.temp_rule_lifetime.get_str(),
-        );
+        let mut controls_spans = Vec::new();
+        for control in &self.controls {
+            controls_spans.push(Span::styled(
+                control.get_keybind_str(),
+                Style::default().bg(Color::Black).fg(Color::White),
+            ));
+            controls_spans.push(Span::styled(
+                control.get_control_str(),
+                Style::default().bg(Color::Gray).fg(Color::Black),
+            ));
+        }
+        let controls_text = vec![controls_spans.into()];
 
+        // Important: Left alignment makes it super easy to calculate whether
+        // mouse clicks occurred over a control "button"
         let controls_paragraph = Paragraph::new(controls_text)
-            .bg(Color::DarkGray)
-            .fg(Color::White)
-            .alignment(Alignment::Center);
+            .bg(Color::Black)
+            .alignment(Alignment::Left);
 
         controls_paragraph.render(areas[3], buf);
+        self.controls_area = areas[3];
     }
 }
 
