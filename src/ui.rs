@@ -139,9 +139,9 @@ impl App {
                 format!(
                     "\
                         rx pings: {} | daemon version: {} | rules: {}\n\
-                        uptime: {} | dns_responses: {} | connections: {}\n\
+                        uptime: {} | dns responses: {} | connections: {}\n\
                         ignored: {} | accepted: {} | dropped: {}\n\
-                        rule_hits: {} | rule_misses: {}",
+                        rule hits: {} | rule misses: {}",
                     self.rx_pings,
                     stats.daemon_version,
                     stats.rules,
