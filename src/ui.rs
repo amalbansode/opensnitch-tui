@@ -148,18 +148,21 @@ impl App {
                     &info.connection.dst_host
                 };
 
+                let src_ip = format_ip_address_string(&info.connection.src_ip);
+                let dst_ip = format_ip_address_string(&info.connection.dst_ip);
+
                 format!(
                     "\
-                src       {} / {}\n\
-                dst       {} / {}\n\
+                src       {}:{}\n\
+                dst       {}:{}\n\
                 proto     {}\n\
                 dst host  {}\n\
                 uid       {}\n\
                 pid       {}\n\
                 ppath     {}",
-                    info.connection.src_ip,
+                    src_ip,
                     info.connection.src_port,
-                    info.connection.dst_ip,
+                    dst_ip,
                     info.connection.dst_port,
                     info.connection.protocol,
                     dst_host_string,
@@ -169,5 +172,14 @@ impl App {
                 )
             }
         }
+    }
+}
+
+/// Format IPv6 addresses (that are already strings) with square brackets. Noop if IPv4.
+fn format_ip_address_string(ip: &String) -> String {
+    if ip.contains(':') {
+        format!("[{ip}]")
+    } else {
+        ip.clone()
     }
 }
