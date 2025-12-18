@@ -6,21 +6,36 @@ use ratatui::{
     widgets::{Block, BorderType, List, ListItem, Paragraph, StatefulWidget, Widget},
 };
 
-use crate::app::{TuiMutState, TuiState};
+use crate::app::{TuiMutState, TuiScreen, TuiState};
 
 impl StatefulWidget for &TuiState {
     type State = TuiMutState;
 
     /// Renders the user interface widgets.
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        match self.current_screen {
+            TuiScreen::Main => {
+                self.render_main_screen(area, buf, state);
+            }
+            TuiScreen::Help => {
+                TuiState::render_help_screen(area, buf, state);
+            }
+        }
+    }
+}
+
+impl TuiState {
+    /// Renders main screen.
+    fn render_main_screen(&self, area: Rect, buf: &mut Buffer, state: &mut TuiMutState) {
         // Get a clock reference timestamp.
         let now = std::time::SystemTime::now();
 
+        // Fill greediness prioritizes connections > controls > stats > alerts
         let areas = Layout::vertical([
-            Constraint::Max(6),
-            Constraint::Max(9),
-            Constraint::Max(5),
-            Constraint::Max(1),
+            Constraint::Max(6),      // Stats
+            Constraint::Min(9),      // Connections
+            Constraint::Fill(10000), // Alerts - high fill ratio prevents Mins from growing
+            Constraint::Min(1),      // Controls
         ])
         .split(area);
         let stats_title = match self.peer {
@@ -132,9 +147,68 @@ impl StatefulWidget for &TuiState {
         controls_paragraph.render(areas[3], buf);
         state.controls_area = areas[3];
     }
-}
 
-impl TuiState {
+    fn render_help_screen(area: Rect, buf: &mut Buffer, _state: &mut TuiMutState) {
+        let help_title = String::from(" OpenSnitch TUI Help ");
+        let help_block = Block::bordered()
+            .title(help_title)
+            .title_alignment(Alignment::Center)
+            .border_type(BorderType::Rounded);
+
+        let mut help_lines: Vec<Line<'_>> = Vec::default();
+        let version = env!("CARGO_PKG_VERSION");
+        let author = env!("CARGO_PKG_AUTHORS");
+        help_lines.push(Line::styled(
+            format!("opensnitch-tui {version} by {author}. Released under the GNU GPLv3."),
+            Style::default().fg(Color::Cyan),
+        ));
+        help_lines.push(Line::default()); // blank
+
+        help_lines.push(Line::styled(
+            "Run the binary with --help to see details on CLI arguments.",
+            Style::default().fg(Color::Cyan),
+        ));
+        help_lines.push(Line::default()); // blank
+
+        help_lines.push(Line::styled(
+            "Keybindings",
+            Style::default().fg(Color::Cyan).bold(),
+        ));
+        // Very scrappy vec of per-line k-vs in help screen
+        // 1st => some keybinding
+        // 2nd => description
+        // Technically slightly repetitive of main screen's footer.
+        let kv_raw_lines = vec![
+            ("Ctrl+C", "Quit"),
+            ("ESC", "Return to main screen"),
+            ("H", "Display this help screen"),
+            ("A", "Allow connection temporarily"),
+            ("D", "Deny connection temporarily"),
+            ("J", "Allow connection forever"),
+            ("L", "Deny connection forever"),
+            ("Arrows", "Scroll alert list"),
+        ];
+        for (raw_k, raw_v) in kv_raw_lines {
+            help_lines.push(Line::from(vec![
+                Span::styled(format!("{raw_k:>7} "), Style::default().fg(Color::White)),
+                Span::styled(raw_v.to_string(), Style::default().fg(Color::Cyan)),
+            ]));
+        }
+        help_lines.push(Line::default()); // blank
+
+        help_lines.push(Line::styled(
+            "The main screen's footer with keybinding hints is clickable.",
+            Style::default().fg(Color::Cyan),
+        ));
+
+        let help_paragraph = Paragraph::new(help_lines)
+            .block(help_block)
+            .fg(Color::Cyan)
+            .bg(Color::Black);
+
+        help_paragraph.render(area, buf);
+    }
+
     fn format_stats_panel(&self) -> String {
         match &self.current_stats {
             Some(stats) => {

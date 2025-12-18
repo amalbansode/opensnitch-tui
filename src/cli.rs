@@ -4,7 +4,7 @@ use clap::{Arg, Command};
 pub fn setup() -> Command {
     Command::new("opensnitch-tui")
     .author("Amal Bansode")
-    .version("0.0.2")
+    .version(env!("CARGO_PKG_VERSION"))
     .about("A Terminal UI control plane for OpenSnitch.")
     .arg(
         Arg::new("ip_port")

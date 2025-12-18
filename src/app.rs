@@ -47,9 +47,18 @@ pub struct App {
     tui_mut_state: TuiMutState,
 }
 
+/// Primary "screens" in TUI.
+#[derive(Debug, PartialEq)]
+pub enum TuiScreen {
+    Main,
+    Help,
+}
+
 /// Shared state between TUI and app driver.
 #[derive(Debug)]
 pub struct TuiState {
+    /// Currently rendered scren.
+    pub current_screen: TuiScreen,
     /// Rx Pings from daemon - internal only.
     rx_pings: u64,
     /// Peer (`OpenSnitch` daemon) address.
@@ -87,6 +96,7 @@ pub enum Controls {
     DenyTemp(constants::Duration),
     AllowForever,
     DenyForever,
+    Help,
 }
 
 impl Controls {
@@ -100,6 +110,7 @@ impl Controls {
             Self::DenyTemp(_) => " D ",
             Self::AllowForever => " J ",
             Self::DenyForever => " L ",
+            Self::Help => " H ",
         }
     }
 
@@ -113,6 +124,7 @@ impl Controls {
             Self::DenyTemp(duration) => format!(" Deny {} ", duration.get_str()),
             Self::AllowForever => String::from(" Allow Forever "),
             Self::DenyForever => String::from(" Deny Forever "),
+            Self::Help => String::from(" Help "),
         }
     }
 
@@ -189,6 +201,7 @@ impl App {
             Controls::DenyTemp(maybe_temp_rule_lifetime.clone().unwrap()),
             Controls::AllowForever,
             Controls::DenyForever,
+            Controls::Help,
         ];
 
         Ok(Self {
@@ -201,6 +214,7 @@ impl App {
             connection_disposition_timeout,
             preset_combo,
             tui_state: TuiState {
+                current_screen: TuiScreen::Main,
                 rx_pings: 0,
                 peer: None,
                 current_stats: None,
@@ -238,7 +252,7 @@ impl App {
         // Only need a draw if:
         // * This is the first cycle (see default value below)
         // * Tick resulted in a meaningful state update
-        // * Crossterm event - some key was pressed
+        // * Crossterm event - some keyboard/mouse interaction
         // * We received an event from the gRPC server
         let mut draw_needed = true;
         while self.running {
@@ -292,39 +306,57 @@ impl App {
     /// # Errors
     /// Not really...
     pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
-        match key_event.code {
-            KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
-                self.events.send(AppEvent::Quit);
-            }
-            KeyCode::Char('t' | 'T') => self.events.send(AppEvent::TestNotify),
-            KeyCode::Char('a' | 'A') => {
-                self.make_and_send_rule(
-                    constants::Action::Allow,
-                    self.tui_state.temp_rule_lifetime,
-                );
-            }
-            KeyCode::Char('d' | 'D') => {
-                self.make_and_send_rule(constants::Action::Deny, self.tui_state.temp_rule_lifetime);
-            }
-            KeyCode::Char('j' | 'J') => {
-                self.make_and_send_rule(constants::Action::Allow, constants::Duration::Always);
-            }
-            KeyCode::Char('l' | 'L') => {
-                self.make_and_send_rule(constants::Action::Deny, constants::Duration::Always);
-            }
-            KeyCode::Up => {
-                self.tui_state.alert_list_render_offset =
-                    self.tui_state.alert_list_render_offset.saturating_sub(1);
-            }
-            KeyCode::Down => {
-                if !self.tui_state.current_alerts.is_empty() {
-                    self.tui_state.alert_list_render_offset = std::cmp::min(
-                        self.tui_state.alert_list_render_offset.saturating_add(1),
-                        self.tui_state.current_alerts.len() - 1,
+        // TODO: might be possible to use some trait magic to avoid repetitive screen matching?
+        match self.tui_state.current_screen {
+            TuiScreen::Main => match key_event.code {
+                KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
+                    self.events.send(AppEvent::Quit);
+                }
+                KeyCode::Char('t' | 'T') => self.events.send(AppEvent::TestNotify),
+                KeyCode::Char('a' | 'A') => {
+                    self.make_and_send_rule(
+                        constants::Action::Allow,
+                        self.tui_state.temp_rule_lifetime,
                     );
                 }
-            }
-            _ => {}
+                KeyCode::Char('d' | 'D') => {
+                    self.make_and_send_rule(
+                        constants::Action::Deny,
+                        self.tui_state.temp_rule_lifetime,
+                    );
+                }
+                KeyCode::Char('j' | 'J') => {
+                    self.make_and_send_rule(constants::Action::Allow, constants::Duration::Always);
+                }
+                KeyCode::Char('l' | 'L') => {
+                    self.make_and_send_rule(constants::Action::Deny, constants::Duration::Always);
+                }
+                KeyCode::Char('h' | 'H') => {
+                    self.set_tui_screen(TuiScreen::Help);
+                }
+                KeyCode::Up => {
+                    self.tui_state.alert_list_render_offset =
+                        self.tui_state.alert_list_render_offset.saturating_sub(1);
+                }
+                KeyCode::Down => {
+                    if !self.tui_state.current_alerts.is_empty() {
+                        self.tui_state.alert_list_render_offset = std::cmp::min(
+                            self.tui_state.alert_list_render_offset.saturating_add(1),
+                            self.tui_state.current_alerts.len() - 1,
+                        );
+                    }
+                }
+                _ => {}
+            },
+            TuiScreen::Help => match key_event.code {
+                KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
+                    self.events.send(AppEvent::Quit);
+                }
+                KeyCode::Esc => {
+                    self.set_tui_screen(TuiScreen::Main);
+                }
+                _ => {}
+            },
         }
         Ok(())
     }
@@ -333,46 +365,70 @@ impl App {
     /// # Errors
     /// Not really...
     pub fn handle_mouse_events(&mut self, mouse_event: MouseEvent) -> color_eyre::Result<bool> {
-        let mut clicked_control = None;
-        if self
-            .tui_mut_state
-            .controls_area
-            .contains(Position::new(mouse_event.column, mouse_event.row))
-        {
-            // Controls footer faux button group is left aligned in TUI, so use a simple
-            // accumulator pattern to determine which control overlaps with click coords.
-            let mut column_accumulator: usize = 0;
-            for control in &self.tui_state.controls {
-                let lb = column_accumulator;
-                column_accumulator += control.get_button_width();
-                let rb = column_accumulator;
-                if usize::from(mouse_event.column) >= lb && usize::from(mouse_event.column) < rb {
-                    clicked_control = Some(control);
-                    break;
+        // TODO: might be possible to use some trait magic to avoid repetitive screen matching?
+        match self.tui_state.current_screen {
+            TuiScreen::Main => {
+                let mut clicked_control = None;
+                if self
+                    .tui_mut_state
+                    .controls_area
+                    .contains(Position::new(mouse_event.column, mouse_event.row))
+                {
+                    // Controls footer faux button group is left aligned in TUI, so use a simple
+                    // accumulator pattern to determine which control overlaps with click coords.
+                    let mut column_accumulator: usize = 0;
+                    for control in &self.tui_state.controls {
+                        let lb = column_accumulator;
+                        column_accumulator += control.get_button_width();
+                        let rb = column_accumulator;
+                        if usize::from(mouse_event.column) >= lb
+                            && usize::from(mouse_event.column) < rb
+                        {
+                            clicked_control = Some(control);
+                            break;
+                        }
+                    }
                 }
-            }
-        }
 
-        if let Some(control) = clicked_control {
-            match control {
-                Controls::Quit => self.events.send(AppEvent::Quit),
-                Controls::AllowTemp(duration) => {
-                    self.make_and_send_rule(constants::Action::Allow, *duration);
-                }
-                Controls::DenyTemp(duration) => {
-                    self.make_and_send_rule(constants::Action::Deny, *duration);
-                }
-                Controls::AllowForever => {
-                    self.make_and_send_rule(constants::Action::Allow, constants::Duration::Always);
-                }
-                Controls::DenyForever => {
-                    self.make_and_send_rule(constants::Action::Deny, constants::Duration::Always);
+                if let Some(control) = clicked_control {
+                    match control {
+                        Controls::Quit => self.events.send(AppEvent::Quit),
+                        Controls::AllowTemp(duration) => {
+                            self.make_and_send_rule(constants::Action::Allow, *duration);
+                        }
+                        Controls::DenyTemp(duration) => {
+                            self.make_and_send_rule(constants::Action::Deny, *duration);
+                        }
+                        Controls::AllowForever => {
+                            self.make_and_send_rule(
+                                constants::Action::Allow,
+                                constants::Duration::Always,
+                            );
+                        }
+                        Controls::DenyForever => {
+                            self.make_and_send_rule(
+                                constants::Action::Deny,
+                                constants::Duration::Always,
+                            );
+                        }
+                        Controls::Help => {
+                            self.set_tui_screen(TuiScreen::Help);
+                        }
+                    }
+                    Ok(true)
+                } else {
+                    Ok(false)
                 }
             }
-            Ok(true)
-        } else {
-            Ok(false)
+            TuiScreen::Help => Ok(false),
         }
+    }
+
+    /// Set desired TUI screen and return whether it's changing from previous.
+    pub fn set_tui_screen(&mut self, desired: TuiScreen) -> bool {
+        let ret = self.tui_state.current_screen != desired;
+        self.tui_state.current_screen = desired;
+        ret
     }
 
     /// Handles the tick event of the terminal.
