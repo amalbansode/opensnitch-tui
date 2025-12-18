@@ -1,19 +1,19 @@
 # OpenSnitch TUI
 
-A Terminal UI control plane for [OpenSnitch](https://github.com/evilsocket/opensnitch), an interactive application firewall for Linux inspired by Little Snitch.
+A Terminal UI control plane for [OpenSnitch](https://github.com/evilsocket/opensnitch), an application firewall for Linux inspired by Little Snitch.
 
 ![TUI screenshot](static/screenshot.png)
 
-This TUI is built in Rust, namely using the `tokio`, `tonic`, and `ratatui` crates. This program currently implements a subset of functions that the [OpenSnitch GUI](https://github.com/evilsocket/opensnitch/wiki/Getting-started) supports. Some features may never be supported due to complexity (e.g. support for multiple nodes).
+This TUI is built in Rust, namely using the `tokio`, `tonic`, and `ratatui` crates. It currently implements a subset of functions that the [OpenSnitch GUI](https://github.com/evilsocket/opensnitch/wiki/Getting-started) supports. Some features may never be supported due to complexity (e.g. support for multiple nodes).
 
 ## Features
 
 This TUI tries to replace the official OpenSnitch GUI in single-node environments where it may be inconvenient/impossible to use the GUI.
 
 * View high-level daemon runtime stats
-* View trapped connection attempts that require a disposition (allow/deny)
-* Easy keybindings to allow/deny trapped network flows
-* View incoming alerts
+* View trapped network flows that require a disposition (allow/deny)
+* Easy keybindings and clickable UI to allow/deny trapped network flows
+* View alerts
 
 The GUI may still be used separately (see below) for features the TUI doesn't yet support.
 

@@ -140,14 +140,13 @@ impl TuiState {
             Some(stats) => {
                 format!(
                     "\
-                        rx pings: {} | daemon version: {} | rules: {}\n\
-                        uptime: {} | dns responses: {} | connections: {}\n\
+                        daemon version: {} | uptime: {}\n\
+                        rules: {} | dns responses: {} | connections: {}\n\
                         ignored: {} | accepted: {} | dropped: {}\n\
                         rule hits: {} | rule misses: {}",
-                    self.rx_pings,
                     stats.daemon_version,
-                    stats.rules,
                     stats.uptime,
+                    stats.rules,
                     stats.dns_responses,
                     stats.connections,
                     stats.ignored,

@@ -50,8 +50,8 @@ pub struct App {
 /// Shared state between TUI and app driver.
 #[derive(Debug)]
 pub struct TuiState {
-    /// Rx Pings.
-    pub rx_pings: u64,
+    /// Rx Pings from daemon - internal only.
+    rx_pings: u64,
     /// Peer (`OpenSnitch` daemon) address.
     pub peer: Option<std::net::SocketAddr>,
     /// Latest stats to present to UI.
