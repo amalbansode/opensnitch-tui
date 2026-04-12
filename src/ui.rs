@@ -69,17 +69,18 @@ impl TuiState {
                 Some(_) => Style::default().fg(Color::Yellow),
             });
         // Also render a "bottom title" with countdown to dispo the connection.
-        if let Some(conn) = &self.current_connection
-            && let Ok(remaining_time) = conn.expiry_ts.duration_since(now)
-        {
-            connection_block = connection_block.title_bottom(
-                Line::from(format!(
-                    " {}s to disposition, else {} ",
-                    remaining_time.as_secs(),
-                    self.default_action.get_str()
-                ))
-                .alignment(Alignment::Right),
-            );
+        #[allow(clippy::collapsible_if)] // TODO: rustc 1.85 compat.
+        if let Some(conn) = &self.current_connection {
+            if let Ok(remaining_time) = conn.expiry_ts.duration_since(now) {
+                connection_block = connection_block.title_bottom(
+                    Line::from(format!(
+                        " {}s to disposition, else {} ",
+                        remaining_time.as_secs(),
+                        self.default_action.get_str()
+                    ))
+                    .alignment(Alignment::Right),
+                );
+            }
         }
 
         let connection_text = self.format_connection_panel();

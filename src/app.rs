@@ -436,13 +436,14 @@ impl App {
     pub fn tick(&mut self) -> bool {
         let mut did_work = false;
         let now = std::time::SystemTime::now();
-        if let Some(conn) = &self.tui_state.current_connection
-            && now >= conn.expiry_ts
-        {
-            // The daemon's gRPC call should time out and take some default action
-            // in the absence of a Rule created by us.
-            self.clear_connection();
-            did_work = true;
+        #[allow(clippy::collapsible_if)] // TODO: rustc 1.85 compat.
+        if let Some(conn) = &self.tui_state.current_connection {
+            if now >= conn.expiry_ts {
+                // The daemon's gRPC call should time out and take some default action
+                // in the absence of a Rule created by us.
+                self.clear_connection();
+                did_work = true;
+            }
         }
 
         // Routinely expire alerts.

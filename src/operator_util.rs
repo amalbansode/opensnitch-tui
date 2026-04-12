@@ -90,35 +90,36 @@ pub struct GeneratedOperatorsInputs {
 impl GeneratedOperatorsInputs {
     /// Generate preset operators for this input struct based on the desired preset combo.
     #[must_use]
+    #[allow(clippy::collapsible_if)] // TODO: rustc 1.85 compat.
     pub fn generate_operators(&self, combo: &PresetCombination) -> Vec<Operator> {
         let mut res = Vec::<Operator>::default();
         // If a preset is enabled && data for that preset exists in inputs, add.
         // If a preset is enabled but data for that preset doesn't exist in inputs,
         // silently drop the operator for that data field. This could be up for debate.
-        if combo.exact_user_id
-            && let Some(user_id) = self.user_id
-        {
-            res.push(match_user_id(user_id));
+        if combo.exact_user_id {
+            if let Some(user_id) = self.user_id {
+                res.push(match_user_id(user_id));
+            }
         }
-        if combo.exact_ppath
-            && let Some(ppath) = &self.ppath
-        {
-            res.push(match_proc_path(ppath));
+        if combo.exact_ppath {
+            if let Some(ppath) = &self.ppath {
+                res.push(match_proc_path(ppath));
+            }
         }
-        if combo.exact_dst_ip
-            && let Some(dst_ip) = &self.dst_ip
-        {
-            res.push(match_dst_ip(dst_ip));
+        if combo.exact_dst_ip {
+            if let Some(dst_ip) = &self.dst_ip {
+                res.push(match_dst_ip(dst_ip));
+            }
         }
-        if combo.exact_dst_port
-            && let Some(dst_port) = self.dst_port
-        {
-            res.push(match_dst_port(dst_port));
+        if combo.exact_dst_port {
+            if let Some(dst_port) = self.dst_port {
+                res.push(match_dst_port(dst_port));
+            }
         }
-        if combo.exact_protocol
-            && let Some(protocol) = &self.protocol
-        {
-            res.push(match_protocol(protocol));
+        if combo.exact_protocol {
+            if let Some(protocol) = &self.protocol {
+                res.push(match_protocol(protocol));
+            }
         }
         match combo.match_hostname {
             MatchHostname::Disabled => {}
